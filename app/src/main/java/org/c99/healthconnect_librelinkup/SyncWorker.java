@@ -17,8 +17,6 @@
 package org.c99.healthconnect_librelinkup;
 
 import android.content.Context;
-import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 
 import androidx.annotation.NonNull;
 import androidx.health.connect.client.HealthConnectClient;
@@ -31,9 +29,6 @@ import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
 import com.google.android.gms.common.GoogleApiAvailability;
-import com.google.android.gms.common.api.AvailabilityException;
-import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
 import com.google.android.gms.wearable.DataClient;
@@ -47,7 +42,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Collections;
-import java.util.concurrent.ExecutionException;
+import java.util.Locale;
 
 import kotlin.coroutines.Continuation;
 import kotlin.coroutines.CoroutineContext;
@@ -82,21 +77,23 @@ public class SyncWorker extends Worker {
             ZonedDateTime time;
             if (gm.FactoryTimestamp != null) {
                 try {
-                    // Attempt to parse as a datetime string
-                    time = ZonedDateTime.parse((String) gm.FactoryTimestamp + " +0000", DateTimeFormatter.ofPattern("M/d/y h:m:s a Z")).withZoneSameInstant(ZoneId.systemDefault());
+                    time = ZonedDateTime.parse(
+                            gm.FactoryTimestamp + " +0000",
+                            DateTimeFormatter.ofPattern("M/d/y h:m:s a Z", Locale.US)
+                    ).withZoneSameInstant(ZoneId.systemDefault());
                 } catch (DateTimeParseException e) {
-                    // If parsing fails, assume it's a long timestamp
                     try {
                         long timestampMillis = Long.parseLong(gm.FactoryTimestamp);
-                        time = ZonedDateTime.ofInstant(Instant.ofEpochMilli(timestampMillis), ZoneId.systemDefault());
+                        time = ZonedDateTime.ofInstant(
+                                Instant.ofEpochMilli(timestampMillis),
+                                ZoneId.systemDefault()
+                        );
                     } catch (NumberFormatException nfe) {
-                        // Handle the case where it's neither a valid datetime string nor a long timestamp
-                        time = ZonedDateTime.now(); // Fallback to current time
+                        time = ZonedDateTime.now();
                     }
                 }
             } else {
-                // Handle null FactoryTimestamp
-                time = ZonedDateTime.now(); // Fallback to current time
+                time = ZonedDateTime.now();
             }
 
             BloodGlucoseRecord r = new BloodGlucoseRecord(
@@ -128,15 +125,15 @@ public class SyncWorker extends Worker {
                     Tasks.await(t);
 
                     PutDataMapRequest putDataMapReq = PutDataMapRequest.create("/glucose");
-                    putDataMapReq.getDataMap().putFloat(GLUCOSE_KEY, result.data.get(0).glucoseMeasurement.Value);
-                    putDataMapReq.getDataMap().putInt(COLOR_KEY, result.data.get(0).glucoseMeasurement.MeasurementColor);
-                    putDataMapReq.getDataMap().putInt(TREND_ARROW_KEY, result.data.get(0).glucoseMeasurement.TrendArrow);
-                    putDataMapReq.getDataMap().putInt(UNITS_KEY, result.data.get(0).glucoseMeasurement.GlucoseUnits);
-                    putDataMapReq.getDataMap().putString(TIMESTAMP_KEY, result.data.get(0).glucoseMeasurement.FactoryTimestamp);
+                    putDataMapReq.getDataMap().putFloat(GLUCOSE_KEY, gm.Value);
+                    putDataMapReq.getDataMap().putInt(COLOR_KEY, gm.MeasurementColor);
+                    putDataMapReq.getDataMap().putInt(TREND_ARROW_KEY, gm.TrendArrow);
+                    putDataMapReq.getDataMap().putInt(UNITS_KEY, gm.GlucoseUnits);
+                    putDataMapReq.getDataMap().putString(TIMESTAMP_KEY, gm.FactoryTimestamp);
                     PutDataRequest putDataReq = putDataMapReq.asPutDataRequest();
                     Tasks.await(dc.putDataItem(putDataReq));
                 } catch (Exception e) {
-                    //Wearable API not available
+                    // Wearable API not available.
                 }
             }
         } catch (Exception e) {
