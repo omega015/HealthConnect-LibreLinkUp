@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix-locale-timestamps
+      - faster-5-minute-sync
   workflow_dispatch:
 
 jobs:
