@@ -47,6 +47,8 @@ import org.c99.healthconnect_librelinkup.DataLayerListenerService
 import org.c99.healthconnect_librelinkup.R
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+import java.util.Locale
 
 private const val RESOURCES_VERSION = "1"
 
@@ -88,8 +90,8 @@ class GlucoseTileService : SuspendingTileService() {
             .addIdToImageMapping("arrow_up", ResourceBuilders.ImageResource.Builder()
                 .setAndroidResourceByResId(
                     ResourceBuilders.AndroidImageResourceByResId.Builder()
-                        .setResourceId(R.drawable.arrow_up)
-                        .build()
+                    .setResourceId(R.drawable.arrow_up)
+                    .build()
                 ).build()
             )
             .build()
@@ -118,10 +120,15 @@ class GlucoseTileService : SuspendingTileService() {
                 else -> Colors.DEFAULT.primary
             }
 
-            val time = ZonedDateTime.parse(
-                glucose.getString(DataLayerListenerService.TIMESTAMP_KEY, "") + " +0000",
-                DateTimeFormatter.ofPattern("M/d/y h:m:s a Z")
-            )
+            val secondaryLabel = try {
+                val time = ZonedDateTime.parse(
+                    glucose.getString(DataLayerListenerService.TIMESTAMP_KEY, "") + " +0000",
+                    DateTimeFormatter.ofPattern("M/d/y h:m:s a Z", Locale.US)
+                )
+                DateUtils.getRelativeTimeSpanString(time.toEpochSecond() * 1000L).toString()
+            } catch (e: DateTimeParseException) {
+                "Time unavailable"
+            }
 
             val singleTileTimeline = TimelineBuilders.Timeline.Builder().addTimelineEntry(
                 TimelineBuilders.TimelineEntry.Builder().setLayout(
@@ -130,7 +137,7 @@ class GlucoseTileService : SuspendingTileService() {
                             glucose.getFloat(DataLayerListenerService.GLUCOSE_KEY, 0f),
                             icon,
                             color,
-                            DateUtils.getRelativeTimeSpanString(time.toEpochSecond()*1000L).toString(),
+                            secondaryLabel,
                             glucose.getInt(DataLayerListenerService.UNITS_KEY, 1))).build()
                 ).build()
             ).build()
