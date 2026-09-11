@@ -69,6 +69,8 @@ public class SyncWorker extends Worker {
     @NonNull
     @Override
     public Result doWork() {
+        Result workerResult = Result.success();
+
         try {
             LibreLinkUp.ConnectionsResult result = libreLinkUp.connections();
             libreLinkUp.setAuthTicket(result.ticket);
@@ -138,9 +140,11 @@ public class SyncWorker extends Worker {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            return Result.failure();
+            workerResult = Result.failure();
+        } finally {
+            libreLinkUp.scheduleNextSync();
         }
 
-        return Result.success();
+        return workerResult;
     }
 }
