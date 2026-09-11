@@ -23,8 +23,9 @@ import android.widget.Toast;
 import androidx.security.crypto.EncryptedSharedPreferences;
 import androidx.security.crypto.MasterKey;
 import androidx.work.Constraints;
+import androidx.work.ExistingWorkPolicy;
 import androidx.work.NetworkType;
-import androidx.work.PeriodicWorkRequest;
+import androidx.work.OneTimeWorkRequest;
 import androidx.work.WorkManager;
 
 import com.squareup.moshi.JsonAdapter;
@@ -36,7 +37,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -48,6 +48,9 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 
 public class LibreLinkUp {
+    public static final String SYNC_WORK_NAME = "glucose-sync";
+    public static final long SYNC_INTERVAL_MINUTES = 5;
+
     private AuthTicket authTicket;
     private User user;
     private Context context;
@@ -79,17 +82,30 @@ public class LibreLinkUp {
     }
 
     public void schedule() {
-        WorkManager.getInstance(context).cancelAllWork();
-
         if(authTicket != null && authTicket.token != null && !authTicket.token.isEmpty()) {
-            WorkManager.getInstance(context).enqueue(
-                    new PeriodicWorkRequest.Builder(SyncWorker.class, 15, TimeUnit.MINUTES)
-                            .setConstraints(new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                            .addTag("sync")
-                            .build());
-            Toast.makeText(context, "Glucose sync job scheduled", Toast.LENGTH_SHORT).show();
-            android.util.Log.i("LibreLinkUp", "Glucose sync job scheduled");
+            enqueueSync(0, ExistingWorkPolicy.REPLACE);
+            Toast.makeText(context, "Glucose sync job scheduled every 5 minutes", Toast.LENGTH_SHORT).show();
+            android.util.Log.i("LibreLinkUp", "Glucose sync job scheduled every 5 minutes");
         }
+    }
+
+    public void scheduleNextSync() {
+        if(authTicket != null && authTicket.token != null && !authTicket.token.isEmpty()) {
+            enqueueSync(SYNC_INTERVAL_MINUTES, ExistingWorkPolicy.REPLACE);
+            android.util.Log.i("LibreLinkUp", "Next glucose sync scheduled in 5 minutes");
+        }
+    }
+
+    private void enqueueSync(long delayMinutes, ExistingWorkPolicy policy) {
+        OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(SyncWorker.class)
+                .setInitialDelay(delayMinutes, TimeUnit.MINUTES)
+                .setConstraints(new Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build())
+                .addTag("sync")
+                .build();
+
+        WorkManager.getInstance(context).enqueueUniqueWork(SYNC_WORK_NAME, policy, request);
     }
 
     public LibreLinkUp(Context context) {
