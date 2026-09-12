@@ -17,6 +17,7 @@
 package org.c99.healthconnect_librelinkup;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -62,6 +63,10 @@ public final class GlucoseSync {
     private static final String UNITS_KEY = "org.c99.healthconnect_librelinkup.units";
     private static final String TIMESTAMP_KEY = "org.c99.healthconnect_librelinkup.timestamp";
 
+    private static final String SYNC_STATE_PREFS = "glucose_sync_state";
+    private static final String KEY_LAST_HEALTH_CONNECT_TIMESTAMP = "last_health_connect_factory_timestamp";
+    private static final String KEY_LAST_WEAR_TIMESTAMP = "last_wear_factory_timestamp";
+
     private GlucoseSync() {
     }
 
@@ -104,45 +109,100 @@ public final class GlucoseSync {
                             + " trend=" + gm.TrendArrow
             );
 
-            ZonedDateTime time = parseMeasurementTime(gm.FactoryTimestamp);
-            HealthConnectClient healthConnectClient = HealthConnectClient.getOrCreate(applicationContext);
-
-            BloodGlucoseRecord record = new BloodGlucoseRecord(
-                    Instant.from(time),
-                    time.getOffset(),
-                    BloodGlucose.milligramsPerDeciliter(gm.ValueInMgPerDl),
-                    BloodGlucoseRecord.SPECIMEN_SOURCE_INTERSTITIAL_FLUID,
-                    0,
-                    BloodGlucoseRecord.RELATION_TO_MEAL_UNKNOWN,
-                    new Metadata(
-                            "",
-                            new DataOrigin(applicationContext.getPackageName()),
-                            Instant.from(time),
-                            null,
-                            0,
-                            null,
-                            0
-                    )
+            String factoryTimestamp = gm.FactoryTimestamp;
+            boolean hasFactoryTimestamp = factoryTimestamp != null && !factoryTimestamp.isEmpty();
+            SharedPreferences syncState = applicationContext.getSharedPreferences(
+                    SYNC_STATE_PREFS,
+                    Context.MODE_PRIVATE
             );
 
-            healthConnectClient.insertRecords(
-                    Collections.singletonList(record),
-                    new Continuation<InsertRecordsResponse>() {
-                        @NonNull
-                        @Override
-                        public CoroutineContext getContext() {
-                            return EmptyCoroutineContext.INSTANCE;
-                        }
-
-                        @Override
-                        public void resumeWith(@NonNull Object result) {
-                            // Health Connect handles completion asynchronously. The existing app
-                            // does not need the response in order to continue the Wear transfer.
-                        }
-                    }
+            String lastHealthConnectTimestamp = syncState.getString(
+                    KEY_LAST_HEALTH_CONNECT_TIMESTAMP,
+                    null
             );
+            String lastWearTimestamp = syncState.getString(KEY_LAST_WEAR_TIMESTAMP, null);
 
-            sendToWear(applicationContext, gm);
+            boolean healthConnectNeedsUpdate = !hasFactoryTimestamp
+                    || !factoryTimestamp.equals(lastHealthConnectTimestamp);
+            boolean wearNeedsUpdate = !hasFactoryTimestamp
+                    || !factoryTimestamp.equals(lastWearTimestamp);
+
+            if (!healthConnectNeedsUpdate && !wearNeedsUpdate) {
+                Log.i(
+                        TAG,
+                        "Duplicate FactoryTimestamp=" + factoryTimestamp
+                                + "; skipping Health Connect and Wear update"
+                );
+                return SyncResult.success();
+            }
+
+            if (healthConnectNeedsUpdate) {
+                ZonedDateTime time = parseMeasurementTime(factoryTimestamp);
+                HealthConnectClient healthConnectClient = HealthConnectClient.getOrCreate(applicationContext);
+
+                BloodGlucoseRecord record = new BloodGlucoseRecord(
+                        Instant.from(time),
+                        time.getOffset(),
+                        BloodGlucose.milligramsPerDeciliter(gm.ValueInMgPerDl),
+                        BloodGlucoseRecord.SPECIMEN_SOURCE_INTERSTITIAL_FLUID,
+                        0,
+                        BloodGlucoseRecord.RELATION_TO_MEAL_UNKNOWN,
+                        new Metadata(
+                                "",
+                                new DataOrigin(applicationContext.getPackageName()),
+                                Instant.from(time),
+                                null,
+                                0,
+                                null,
+                                0
+                        )
+                );
+
+                healthConnectClient.insertRecords(
+                        Collections.singletonList(record),
+                        new Continuation<InsertRecordsResponse>() {
+                            @NonNull
+                            @Override
+                            public CoroutineContext getContext() {
+                                return EmptyCoroutineContext.INSTANCE;
+                            }
+
+                            @Override
+                            public void resumeWith(@NonNull Object result) {
+                                // Health Connect handles completion asynchronously. The existing app
+                                // does not need the response in order to continue the Wear transfer.
+                            }
+                        }
+                );
+
+                if (hasFactoryTimestamp) {
+                    syncState.edit()
+                            .putString(KEY_LAST_HEALTH_CONNECT_TIMESTAMP, factoryTimestamp)
+                            .apply();
+                }
+            } else {
+                Log.i(
+                        TAG,
+                        "Duplicate FactoryTimestamp=" + factoryTimestamp
+                                + "; skipping Health Connect insert"
+                );
+            }
+
+            if (wearNeedsUpdate) {
+                boolean wearSent = sendToWear(applicationContext, gm);
+                if (wearSent && hasFactoryTimestamp) {
+                    syncState.edit()
+                            .putString(KEY_LAST_WEAR_TIMESTAMP, factoryTimestamp)
+                            .apply();
+                }
+            } else {
+                Log.i(
+                        TAG,
+                        "Duplicate FactoryTimestamp=" + factoryTimestamp
+                                + "; skipping Wear update"
+                );
+            }
+
             return SyncResult.success();
         } catch (Exception exception) {
             Log.e(TAG, "Glucose sync failed", exception);
@@ -173,11 +233,11 @@ public final class GlucoseSync {
         }
     }
 
-    private static void sendToWear(Context context, LibreLinkUp.GlucoseMeasurement gm) {
+    private static boolean sendToWear(Context context, LibreLinkUp.GlucoseMeasurement gm) {
         if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context)
                 != com.google.android.gms.common.ConnectionResult.SUCCESS) {
             Log.w(TAG, "Google Play Services unavailable; skipping Wear transfer");
-            return;
+            return false;
         }
 
         try {
@@ -200,9 +260,11 @@ public final class GlucoseSync {
                     "Sent to Wear glucose=" + gm.Value
                             + " timestamp=" + gm.FactoryTimestamp
             );
+            return true;
         } catch (Exception exception) {
             // A Wear transfer failure should not discard the successful Libre/Health Connect sync.
             Log.e(TAG, "Wear transfer failed", exception);
+            return false;
         }
     }
 }
