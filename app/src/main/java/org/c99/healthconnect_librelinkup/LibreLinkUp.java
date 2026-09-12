@@ -336,7 +336,6 @@ public class LibreLinkUp {
 
         Request request = new Request.Builder()
                 .url(LIBRELINKUP_URL + "/llu/connections")
-                .headers(LIBRELINKUP_HEADERS)
                 .headers(headers)
                 .build();
 
