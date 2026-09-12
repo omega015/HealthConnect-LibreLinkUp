@@ -63,7 +63,7 @@ public class LibreLinkUp {
     private AuthTicket authTicket;
     private User user;
     private final Context context;
-    private String LIBRELINKUP_URL = "https://api-us.libreview.io";
+    private String LIBRELINKUP_URL = "https://api.libreview.io";
 
     private final OkHttpClient client = new OkHttpClient();
     private final Moshi moshi = new Moshi.Builder().build();
@@ -116,7 +116,8 @@ public class LibreLinkUp {
     }
 
     private int sanitizeFastInterval(int minutes) {
-        if (minutes == 2 || minutes == 3 || minutes == 5 || minutes == 10 || minutes == 15 || minutes == 30) {
+        if (minutes == 1 || minutes == 2 || minutes == 3 || minutes == 5
+                || minutes == 10 || minutes == 15 || minutes == 30) {
             return minutes;
         }
         return DEFAULT_FAST_SYNC_INTERVAL_MINUTES;
@@ -202,7 +203,7 @@ public class LibreLinkUp {
         try {
             SharedPreferences cache = getEncryptedSharedPreferences();
 
-            LIBRELINKUP_URL = cache.getString("url", "https://api-us.libreview.io");
+            LIBRELINKUP_URL = cache.getString("url", "https://api.libreview.io");
 
             authTicket = new AuthTicket();
             authTicket.token = cache.getString("auth_token", null);
@@ -310,21 +311,57 @@ public class LibreLinkUp {
             loginRequest.put("email", email);
             loginRequest.put("password", password);
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new IOException("Unable to create LibreLinkUp login request", e);
         }
 
-        Request request = new Request.Builder()
-                .url(LIBRELINKUP_URL + "/llu/auth/login")
-                .headers(LIBRELINKUP_HEADERS)
-                .post(RequestBody.create(MediaType.parse("application/json; charset=utf-8"), loginRequest.toString()))
-                .build();
+        for (int redirectCount = 0; redirectCount <= 3; redirectCount++) {
+            Request request = new Request.Builder()
+                    .url(LIBRELINKUP_URL + "/llu/auth/login")
+                    .headers(LIBRELINKUP_HEADERS)
+                    .post(RequestBody.create(
+                            MediaType.parse("application/json; charset=utf-8"),
+                            loginRequest.toString()
+                    ))
+                    .build();
 
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful())
-                throw new IOException("Unexpected code " + response);
+            try (Response response = client.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    throw new IOException("Unexpected code " + response);
+                }
 
-            return loginResultJsonAdapter.fromJson(response.body().string());
+                LoginResult result = loginResultJsonAdapter.fromJson(response.body().string());
+                if (result == null) {
+                    throw new IOException("Empty LibreLinkUp login response");
+                }
+
+                if (result.status == 0
+                        && result.data != null
+                        && result.data.redirect) {
+                    String region = result.data.region;
+                    if (region == null || region.trim().isEmpty()
+                            || !region.matches("[A-Za-z0-9-]+")) {
+                        throw new IOException("LibreLinkUp returned an invalid redirect region");
+                    }
+
+                    String redirectedUrl = "https://api-" + region + ".libreview.io";
+                    if (redirectedUrl.equalsIgnoreCase(LIBRELINKUP_URL)) {
+                        throw new IOException("LibreLinkUp regional redirect loop detected");
+                    }
+
+                    android.util.Log.i(
+                            "LibreLinkUp",
+                            "Libre login redirected to region " + region
+                                    + " (" + redirectedUrl + ")"
+                    );
+                    setUrl(redirectedUrl);
+                    continue;
+                }
+
+                return result;
+            }
         }
+
+        throw new IOException("Too many LibreLinkUp regional redirects");
     }
 
     public ConnectionsResult connections() throws IOException {
@@ -404,6 +441,8 @@ public class LibreLinkUp {
         public static class LoginResultData {
             User user;
             AuthTicket authTicket;
+            boolean redirect;
+            String region;
         };
         LoginResultData data;
     }
