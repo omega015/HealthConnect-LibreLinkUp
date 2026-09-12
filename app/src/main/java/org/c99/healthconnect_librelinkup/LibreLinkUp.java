@@ -17,15 +17,17 @@
 package org.c99.healthconnect_librelinkup;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Build;
 import android.widget.Toast;
 
 import androidx.security.crypto.EncryptedSharedPreferences;
 import androidx.security.crypto.MasterKey;
 import androidx.work.Constraints;
-import androidx.work.ExistingWorkPolicy;
+import androidx.work.ExistingPeriodicWorkPolicy;
 import androidx.work.NetworkType;
-import androidx.work.OneTimeWorkRequest;
+import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
 
 import com.squareup.moshi.JsonAdapter;
@@ -49,11 +51,18 @@ import okhttp3.Response;
 
 public class LibreLinkUp {
     public static final String SYNC_WORK_NAME = "glucose-sync";
-    public static final long SYNC_INTERVAL_MINUTES = 5;
+    public static final String SYNC_MODE_STANDARD = "standard";
+    public static final String SYNC_MODE_FAST = "fast";
+    public static final int DEFAULT_FAST_SYNC_INTERVAL_MINUTES = 5;
+    public static final long STANDARD_SYNC_INTERVAL_MINUTES = 15;
+
+    private static final String SETTINGS_PREFS = "sync_settings";
+    private static final String KEY_SYNC_MODE = "sync_mode";
+    private static final String KEY_FAST_SYNC_INTERVAL = "fast_sync_interval_minutes";
 
     private AuthTicket authTicket;
     private User user;
-    private Context context;
+    private final Context context;
     private String LIBRELINKUP_URL = "https://api-us.libreview.io";
 
     private final OkHttpClient client = new OkHttpClient();
@@ -81,35 +90,115 @@ public class LibreLinkUp {
         );
     }
 
+    private SharedPreferences getSyncSettings() {
+        return context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE);
+    }
+
+    public String getSyncMode() {
+        return getSyncSettings().getString(KEY_SYNC_MODE, SYNC_MODE_STANDARD);
+    }
+
+    public void setSyncMode(String mode) {
+        String safeMode = SYNC_MODE_FAST.equals(mode) ? SYNC_MODE_FAST : SYNC_MODE_STANDARD;
+        getSyncSettings().edit().putString(KEY_SYNC_MODE, safeMode).apply();
+    }
+
+    public int getFastSyncIntervalMinutes() {
+        return sanitizeFastInterval(
+                getSyncSettings().getInt(KEY_FAST_SYNC_INTERVAL, DEFAULT_FAST_SYNC_INTERVAL_MINUTES)
+        );
+    }
+
+    public void setFastSyncIntervalMinutes(int minutes) {
+        getSyncSettings().edit()
+                .putInt(KEY_FAST_SYNC_INTERVAL, sanitizeFastInterval(minutes))
+                .apply();
+    }
+
+    private int sanitizeFastInterval(int minutes) {
+        if (minutes == 10 || minutes == 15) {
+            return minutes;
+        }
+        return DEFAULT_FAST_SYNC_INTERVAL_MINUTES;
+    }
+
     public void schedule() {
-        if(authTicket != null && authTicket.token != null && !authTicket.token.isEmpty()) {
-            enqueueSync(0, ExistingWorkPolicy.REPLACE);
-            Toast.makeText(context, "Glucose sync job scheduled every 5 minutes", Toast.LENGTH_SHORT).show();
-            android.util.Log.i("LibreLinkUp", "Glucose sync job scheduled every 5 minutes");
+        if (!hasValidAuthTicket()) {
+            stopAllSync();
+            return;
+        }
+
+        if (SYNC_MODE_FAST.equals(getSyncMode())) {
+            startFastSync();
+        } else {
+            startStandardSync();
         }
     }
 
-    public void scheduleNextSync() {
-        if(authTicket != null && authTicket.token != null && !authTicket.token.isEmpty()) {
-            enqueueSync(SYNC_INTERVAL_MINUTES, ExistingWorkPolicy.REPLACE);
-            android.util.Log.i("LibreLinkUp", "Next glucose sync scheduled in 5 minutes");
-        }
+    public void applySyncSettings() {
+        schedule();
     }
 
-    private void enqueueSync(long delayMinutes, ExistingWorkPolicy policy) {
-        OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(SyncWorker.class)
-                .setInitialDelay(delayMinutes, TimeUnit.MINUTES)
+    private boolean hasValidAuthTicket() {
+        return authTicket != null && authTicket.token != null && !authTicket.token.isEmpty();
+    }
+
+    private void startStandardSync() {
+        stopFastSync();
+
+        PeriodicWorkRequest request = new PeriodicWorkRequest.Builder(
+                SyncWorker.class,
+                STANDARD_SYNC_INTERVAL_MINUTES,
+                TimeUnit.MINUTES
+        )
                 .setConstraints(new Constraints.Builder()
                         .setRequiredNetworkType(NetworkType.CONNECTED)
                         .build())
                 .addTag("sync")
                 .build();
 
-        WorkManager.getInstance(context).enqueueUniqueWork(SYNC_WORK_NAME, policy, request);
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                SYNC_WORK_NAME,
+                ExistingPeriodicWorkPolicy.UPDATE,
+                request
+        );
+
+        android.util.Log.i("LibreLinkUp", "Standard glucose sync scheduled with WorkManager");
+    }
+
+    private void startFastSync() {
+        WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK_NAME);
+
+        Intent intent = new Intent(context, FastSyncService.class);
+        intent.setAction(FastSyncService.ACTION_START);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent);
+        } else {
+            context.startService(intent);
+        }
+
+        int interval = getFastSyncIntervalMinutes();
+        Toast.makeText(
+                context,
+                "Fast glucose sync enabled every " + interval + " minutes",
+                Toast.LENGTH_SHORT
+        ).show();
+        android.util.Log.i("LibreLinkUp", "Fast glucose sync enabled every " + interval + " minutes");
+    }
+
+    private void stopFastSync() {
+        Intent intent = new Intent(context, FastSyncService.class);
+        intent.setAction(FastSyncService.ACTION_STOP);
+        context.stopService(intent);
+    }
+
+    public void stopAllSync() {
+        WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK_NAME);
+        stopFastSync();
     }
 
     public LibreLinkUp(Context context) {
-        this.context = context;
+        this.context = context.getApplicationContext();
         try {
             SharedPreferences cache = getEncryptedSharedPreferences();
 
@@ -146,7 +235,7 @@ public class LibreLinkUp {
         try {
             SharedPreferences.Editor cache = getEncryptedSharedPreferences().edit();
             cache.putString("url", url);
-            cache.commit();
+            cache.apply();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -164,7 +253,7 @@ public class LibreLinkUp {
                 cache.remove("auth_duration");
                 cache.remove("auth_expires");
             }
-            cache.commit();
+            cache.apply();
             authTicket = ticket;
         } catch (Exception e) {
             authTicket = null;
@@ -185,7 +274,7 @@ public class LibreLinkUp {
                 cache.remove("user_first_name");
                 cache.remove("user_last_name");
             }
-            cache.commit();
+            cache.apply();
             this.user = user;
         } catch (Exception e) {
             this.user = null;
