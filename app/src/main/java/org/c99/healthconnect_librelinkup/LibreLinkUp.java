@@ -40,6 +40,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.Headers;
@@ -329,34 +330,71 @@ public class LibreLinkUp {
                     throw new IOException("Unexpected code " + response);
                 }
 
-                LoginResult result = loginResultJsonAdapter.fromJson(response.body().string());
-                if (result == null) {
+                if (response.body() == null) {
                     throw new IOException("Empty LibreLinkUp login response");
                 }
 
-                if (result.status == 0
-                        && result.data != null
-                        && result.data.redirect) {
-                    String region = result.data.region;
+                String responseBody = response.body().string();
+                JSONObject responseJson;
+                try {
+                    responseJson = new JSONObject(responseBody);
+                } catch (Exception e) {
+                    throw new IOException("Invalid LibreLinkUp login response", e);
+                }
+
+                int status = responseJson.optInt("status", -1);
+                JSONObject dataJson = responseJson.optJSONObject("data");
+                boolean redirect = false;
+                String region = null;
+                boolean hasUser = false;
+                boolean hasAuthTicket = false;
+
+                if (dataJson != null) {
+                    Object redirectValue = dataJson.opt("redirect");
+                    if (redirectValue instanceof Boolean) {
+                        redirect = (Boolean) redirectValue;
+                    } else if (redirectValue != null) {
+                        redirect = Boolean.parseBoolean(String.valueOf(redirectValue));
+                    }
+                    region = dataJson.optString("region", null);
+                    hasUser = dataJson.optJSONObject("user") != null;
+                    hasAuthTicket = dataJson.optJSONObject("authTicket") != null;
+                }
+
+                android.util.Log.i(
+                        "LibreLinkUp",
+                        "Login response: status=" + status
+                                + " redirect=" + redirect
+                                + " region=" + (region == null || region.isEmpty() ? "none" : region)
+                                + " hasUser=" + hasUser
+                                + " hasAuthTicket=" + hasAuthTicket
+                );
+
+                if (status == 0 && redirect) {
                     if (region == null || region.trim().isEmpty()
-                            || !region.matches("[A-Za-z0-9-]+")) {
+                            || !region.trim().matches("[A-Za-z0-9-]+")) {
                         throw new IOException("LibreLinkUp returned an invalid redirect region");
                     }
 
-                    String redirectedUrl = "https://api-" + region + ".libreview.io";
+                    String normalizedRegion = region.trim().toLowerCase(Locale.US);
+                    String redirectedUrl = "https://api-" + normalizedRegion + ".libreview.io";
                     if (redirectedUrl.equalsIgnoreCase(LIBRELINKUP_URL)) {
                         throw new IOException("LibreLinkUp regional redirect loop detected");
                     }
 
                     android.util.Log.i(
                             "LibreLinkUp",
-                            "Libre login redirected to region " + region
+                            "Libre login redirected to region " + normalizedRegion
                                     + " (" + redirectedUrl + ")"
                     );
                     setUrl(redirectedUrl);
                     continue;
                 }
 
+                LoginResult result = loginResultJsonAdapter.fromJson(responseBody);
+                if (result == null) {
+                    throw new IOException("Unable to parse LibreLinkUp login response");
+                }
                 return result;
             }
         }
