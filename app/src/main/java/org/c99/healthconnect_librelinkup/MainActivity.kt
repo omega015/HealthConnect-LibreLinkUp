@@ -508,7 +508,7 @@ fun MainView(viewModel: LoginViewModel = viewModel(),
                             expanded = intervalExpanded,
                             onDismissRequest = { intervalExpanded = false }
                         ) {
-                            listOf(5, 10, 15).forEach { minutes ->
+                            listOf(2, 3, 5, 10, 15, 30).forEach { minutes ->
                                 DropdownMenuItem(
                                     text = { Text(stringResource(id = R.string.fast_sync_interval_value, minutes)) },
                                     onClick = {
