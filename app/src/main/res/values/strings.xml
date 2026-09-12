@@ -24,6 +24,13 @@
     <string name="status_login">Enter your email address and password above to login to LibreLinkUp</string>
     <string name="battery_restricted">⚠️ This app is currently being restricted from running in the background</string>
     <string name="disable_battery_restrictions">Disable Battery Optimizations</string>
+    <string name="sync_mode_label">Glucose sync mode</string>
+    <string name="sync_mode_standard">Standard</string>
+    <string name="sync_mode_fast">Fast</string>
+    <string name="standard_sync_explanation">Standard uses Android background scheduling at a 15-minute interval. Android may batch or delay background work.</string>
+    <string name="fast_sync_interval_label">Fast sync interval</string>
+    <string name="fast_sync_interval_value">%1$d minutes</string>
+    <string name="fast_sync_explanation">Fast mode uses a foreground service for more dependable updates and keeps a persistent notification visible.</string>
     <string-array name="api_endpoints">
         <item>https://api.libreview.io</item>
         <item>https://api-ae.libreview.io</item>
