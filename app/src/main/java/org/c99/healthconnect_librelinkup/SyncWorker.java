@@ -17,6 +17,7 @@
 package org.c99.healthconnect_librelinkup;
 
 import android.content.Context;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.health.connect.client.HealthConnectClient;
@@ -49,6 +50,8 @@ import kotlin.coroutines.CoroutineContext;
 import kotlin.coroutines.EmptyCoroutineContext;
 
 public class SyncWorker extends Worker {
+    private static final String TAG = "LibreLinkUpSync";
+
     private final LibreLinkUp libreLinkUp;
     private final HealthConnectClient healthConnectClient;
 
@@ -75,6 +78,14 @@ public class SyncWorker extends Worker {
             LibreLinkUp.ConnectionsResult result = libreLinkUp.connections();
             libreLinkUp.setAuthTicket(result.ticket);
             LibreLinkUp.GlucoseMeasurement gm = result.data.get(0).glucoseMeasurement;
+
+            Log.i(
+                    TAG,
+                    "Fetched glucose=" + gm.Value
+                            + " mg/dL=" + gm.ValueInMgPerDl
+                            + " timestamp=" + gm.FactoryTimestamp
+                            + " trend=" + gm.TrendArrow
+            );
 
             ZonedDateTime time;
             if (gm.FactoryTimestamp != null) {
@@ -134,12 +145,20 @@ public class SyncWorker extends Worker {
                     putDataMapReq.getDataMap().putString(TIMESTAMP_KEY, gm.FactoryTimestamp);
                     PutDataRequest putDataReq = putDataMapReq.asPutDataRequest();
                     Tasks.await(dc.putDataItem(putDataReq));
+
+                    Log.i(
+                            TAG,
+                            "Sent to Wear glucose=" + gm.Value
+                                    + " timestamp=" + gm.FactoryTimestamp
+                    );
                 } catch (Exception e) {
-                    // Wearable API not available.
+                    Log.e(TAG, "Wear transfer failed", e);
                 }
+            } else {
+                Log.w(TAG, "Google Play Services unavailable; skipping Wear transfer");
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e(TAG, "Glucose sync failed", e);
             workerResult = Result.failure();
         } finally {
             libreLinkUp.scheduleNextSync();
