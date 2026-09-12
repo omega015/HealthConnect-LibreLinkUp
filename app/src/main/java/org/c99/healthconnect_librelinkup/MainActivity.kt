@@ -100,6 +100,7 @@ data class LoginUiState(
     var email: String = "",
     var password: String = "",
     var status: String = "",
+    var isLoggedIn: Boolean = false,
     var version: String = "Version",
     var isIgnoringBatteryOptimizations: Boolean = false,
     var syncMode: String = LibreLinkUp.SYNC_MODE_STANDARD,
@@ -124,6 +125,10 @@ class LoginViewModel: ViewModel() {
 
     fun setStatus(status: String) {
         _uiState.value = _uiState.value.copy(status = status)
+    }
+
+    fun setIsLoggedIn(isLoggedIn: Boolean) {
+        _uiState.value = _uiState.value.copy(isLoggedIn = isLoggedIn)
     }
 
     fun setVersion(version: String) {
@@ -171,6 +176,7 @@ class MainActivity : ComponentActivity() {
             MainView(
                 onUrlChanged = { libreLinkUp.setUrl(it) },
                 onLoginButtonClicked = { onLoginButtonClicked() },
+                onLogoutButtonClicked = { onLogoutButtonClicked() },
                 onDisableBatteryRestrictionsButtonClicked = { onDisableBatteryRestrictionsButtonClicked() },
                 onSyncModeChanged = { onSyncModeChanged(it) },
                 onFastSyncIntervalChanged = { onFastSyncIntervalChanged(it) }
@@ -182,8 +188,15 @@ class MainActivity : ComponentActivity() {
         viewModel.setFastSyncIntervalMinutes(libreLinkUp.fastSyncIntervalMinutes)
 
         val user = libreLinkUp.user
-        if (user != null && user.email != null) {
+        val authTicket = libreLinkUp.authTicket
+        if (
+            user != null &&
+            user.email != null &&
+            authTicket != null &&
+            !authTicket.token.isNullOrBlank()
+        ) {
             viewModel.setEmail(user.email)
+            viewModel.setIsLoggedIn(true)
             viewModel.setStatus("Logged in as " +
                     user.firstName + " " +
                     user.lastName
@@ -295,6 +308,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun onLogoutButtonClicked() {
+        libreLinkUp.stopAllSync()
+        libreLinkUp.authTicket = null
+        libreLinkUp.user = null
+        getSharedPreferences("glucose_sync_state", MODE_PRIVATE).edit().clear().apply()
+
+        viewModel.setPassword("")
+        viewModel.setIsLoggedIn(false)
+        viewModel.setStatus("Logged out")
+        Log.i("LibreLinkUp", "Logged out; cached session cleared and glucose sync stopped")
+    }
+
     private fun onLoginButtonClicked() {
         if (viewModel.uiState.value.email.isNotBlank() && viewModel.uiState.value.password.isNotBlank()) {
             CoroutineScope(Dispatchers.Default).launch {
@@ -315,6 +340,8 @@ class MainActivity : ComponentActivity() {
                         libreLinkUp.authTicket = loginTicket
                         libreLinkUp.user = loginUser
                         viewModel.setUrl(libreLinkUp.url)
+                        viewModel.setPassword("")
+                        viewModel.setIsLoggedIn(true)
                         CoroutineScope(Dispatchers.Main).launch {
                             libreLinkUp.schedule()
                         }
@@ -364,6 +391,7 @@ fun Modifier.autofill(
 fun MainView(viewModel: LoginViewModel = viewModel(),
              onUrlChanged: (String) -> Unit = {},
              onLoginButtonClicked: () -> Unit = {},
+             onLogoutButtonClicked: () -> Unit = {},
              onDisableBatteryRestrictionsButtonClicked: () -> Unit = {},
              onSyncModeChanged: (String) -> Unit = {},
              onFastSyncIntervalChanged: (Int) -> Unit = {}) {
@@ -402,13 +430,18 @@ fun MainView(viewModel: LoginViewModel = viewModel(),
             ) {
                 ExposedDropdownMenuBox(
                     expanded = serverExpanded,
-                    onExpandedChange = { serverExpanded = !serverExpanded },
+                    onExpandedChange = {
+                        if (!uiState.isLoggedIn) {
+                            serverExpanded = !serverExpanded
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     OutlinedTextField(
                         value = uiState.url,
                         onValueChange = {},
                         readOnly = true,
+                        enabled = !uiState.isLoggedIn,
                         label = { Text(stringResource(id = R.string.prompt_url)) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = serverExpanded) },
                         modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
@@ -429,37 +462,49 @@ fun MainView(viewModel: LoginViewModel = viewModel(),
                         }
                     }
                 }
-                OutlinedTextField(
-                    value = uiState.email,
-                    onValueChange = { viewModel.setEmail(it) },
-                    label = { Text(stringResource(id = R.string.prompt_email)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next, keyboardType = KeyboardType.Email),
-                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
-                    modifier = Modifier.fillMaxWidth().autofill(
-                        autofillTypes = listOf(AutofillType.EmailAddress),
-                        onFill = { viewModel.setEmail(it) },
+
+                if (uiState.isLoggedIn) {
+                    Text(uiState.status)
+                    Button(
+                        onClick = onLogoutButtonClicked,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Log out")
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = uiState.email,
+                        onValueChange = { viewModel.setEmail(it) },
+                        label = { Text(stringResource(id = R.string.prompt_email)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next, keyboardType = KeyboardType.Email),
+                        keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
+                        modifier = Modifier.fillMaxWidth().autofill(
+                            autofillTypes = listOf(AutofillType.EmailAddress),
+                            onFill = { viewModel.setEmail(it) },
+                        )
                     )
-                )
-                OutlinedTextField(
-                    value = uiState.password,
-                    onValueChange = { viewModel.setPassword(it) },
-                    label = { Text(stringResource(id = R.string.prompt_password)) },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus(); onLoginButtonClicked(); }),
-                    keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done, keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth().autofill(
-                        autofillTypes = listOf(AutofillType.Password),
-                        onFill = { viewModel.setPassword(it) },
+                    OutlinedTextField(
+                        value = uiState.password,
+                        onValueChange = { viewModel.setPassword(it) },
+                        label = { Text(stringResource(id = R.string.prompt_password)) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus(); onLoginButtonClicked(); }),
+                        keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done, keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth().autofill(
+                            autofillTypes = listOf(AutofillType.Password),
+                            onFill = { viewModel.setPassword(it) },
+                        )
                     )
-                )
-                Button(onClick = { focusManager.clearFocus(); onLoginButtonClicked() },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(stringResource(id = R.string.button_login))
+                    Button(
+                        onClick = { focusManager.clearFocus(); onLoginButtonClicked() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(id = R.string.button_login))
+                    }
+                    Text(uiState.status)
                 }
-                Text(uiState.status)
 
                 ExposedDropdownMenuBox(
                     expanded = syncModeExpanded,
