@@ -3,7 +3,10 @@ name: Build test APKs
 on:
   push:
     branches:
+      - main
       - fix-locale-timestamps
+      - faster-5-minute-sync
+      - configurable-foreground-sync
   workflow_dispatch:
 
 jobs:
@@ -11,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      ANDROID_USER_HOME: /home/runner/.android
 
     steps:
       - name: Check out repository
@@ -24,6 +29,32 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Restore debug signing key
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.android/debug.keystore
+          key: ${{ runner.os }}-android-debug-keystore-v3
+
+      - name: Ensure persistent debug signing key
+        shell: bash
+        run: |
+          mkdir -p "$ANDROID_USER_HOME"
+          if [ ! -f "$ANDROID_USER_HOME/debug.keystore" ]; then
+            keytool -genkeypair \
+              -keystore "$ANDROID_USER_HOME/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          keytool -list -v \
+            -keystore "$ANDROID_USER_HOME/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey | grep -E "SHA256:|Valid from:"
 
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
