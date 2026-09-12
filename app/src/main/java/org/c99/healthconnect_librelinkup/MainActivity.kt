@@ -301,21 +301,35 @@ class MainActivity : ComponentActivity() {
                 try {
                     val loginResult =
                         libreLinkUp.login(viewModel.uiState.value.email, viewModel.uiState.value.password)
-                    if (loginResult != null && loginResult.status == 0 && loginResult.data != null) {
-                        libreLinkUp.authTicket = loginResult.data.authTicket
-                        libreLinkUp.user = loginResult.data.user
+                    val loginData = loginResult?.data
+                    val loginUser = loginData?.user
+                    val loginTicket = loginData?.authTicket
+
+                    if (
+                        loginResult != null &&
+                        loginResult.status == 0 &&
+                        loginUser != null &&
+                        loginTicket != null &&
+                        !loginTicket.token.isNullOrBlank()
+                    ) {
+                        libreLinkUp.authTicket = loginTicket
+                        libreLinkUp.user = loginUser
+                        viewModel.setUrl(libreLinkUp.url)
                         CoroutineScope(Dispatchers.Main).launch {
                             libreLinkUp.schedule()
                         }
-                        viewModel.setStatus("Logged in as " + loginResult.data.user.firstName + " " + loginResult.data.user.lastName)
+                        viewModel.setStatus("Logged in as " + loginUser.firstName + " " + loginUser.lastName)
                     } else {
                         if (loginResult != null && loginResult.error != null) {
                             Log.e("Libre", "Message: " + loginResult.error.message)
+                        } else {
+                            Log.e("Libre", "Login response did not contain a valid user and auth ticket")
                         }
                         viewModel.setStatus("Login failed. Check your username, password, and server.")
                     }
                 } catch (e: Exception) {
                     Log.e("Libre", "Login failed", e)
+                    viewModel.setUrl(libreLinkUp.url)
                     viewModel.setStatus("Login failed. Check your connection and server selection.")
                 }
             }
@@ -494,10 +508,14 @@ fun MainView(viewModel: LoginViewModel = viewModel(),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         OutlinedTextField(
-                            value = stringResource(
-                                id = R.string.fast_sync_interval_value,
-                                uiState.fastSyncIntervalMinutes
-                            ),
+                            value = if (uiState.fastSyncIntervalMinutes == 1) {
+                                "1 minute"
+                            } else {
+                                stringResource(
+                                    id = R.string.fast_sync_interval_value,
+                                    uiState.fastSyncIntervalMinutes
+                                )
+                            },
                             onValueChange = {},
                             readOnly = true,
                             label = { Text(stringResource(id = R.string.fast_sync_interval_label)) },
@@ -508,9 +526,17 @@ fun MainView(viewModel: LoginViewModel = viewModel(),
                             expanded = intervalExpanded,
                             onDismissRequest = { intervalExpanded = false }
                         ) {
-                            listOf(2, 3, 5, 10, 15, 30).forEach { minutes ->
+                            listOf(1, 2, 3, 5, 10, 15, 30).forEach { minutes ->
                                 DropdownMenuItem(
-                                    text = { Text(stringResource(id = R.string.fast_sync_interval_value, minutes)) },
+                                    text = {
+                                        Text(
+                                            if (minutes == 1) {
+                                                "1 minute"
+                                            } else {
+                                                stringResource(id = R.string.fast_sync_interval_value, minutes)
+                                            }
+                                        )
+                                    },
                                     onClick = {
                                         viewModel.setFastSyncIntervalMinutes(minutes)
                                         onFastSyncIntervalChanged(minutes)
