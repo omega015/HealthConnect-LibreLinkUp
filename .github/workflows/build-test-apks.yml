@@ -33,7 +33,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /home/runner/.android/debug.keystore
-          key: ${{ runner.os }}-android-debug-keystore-v2
+          key: ${{ runner.os }}-android-debug-keystore-v3
 
       - name: Ensure persistent debug signing key
         shell: bash
