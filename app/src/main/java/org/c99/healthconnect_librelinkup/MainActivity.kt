@@ -16,11 +16,14 @@
 
 package org.c99.healthconnect_librelinkup
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
@@ -29,6 +32,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -143,6 +147,20 @@ class MainActivity : ComponentActivity() {
     private lateinit var libreLinkUp: LibreLinkUp
     private val viewModel: LoginViewModel by viewModels()
 
+    private val requestNotificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                applySyncMode(LibreLinkUp.SYNC_MODE_FAST)
+            } else {
+                viewModel.setSyncMode(libreLinkUp.syncMode)
+                Toast.makeText(
+                    this,
+                    "Fast sync needs notification permission to show its persistent status notification.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -251,6 +269,19 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun onSyncModeChanged(mode: String) {
+        if (
+            mode == LibreLinkUp.SYNC_MODE_FAST &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return
+        }
+
+        applySyncMode(mode)
+    }
+
+    private fun applySyncMode(mode: String) {
         libreLinkUp.syncMode = mode
         viewModel.setSyncMode(libreLinkUp.syncMode)
         libreLinkUp.applySyncSettings()
