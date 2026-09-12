@@ -192,7 +192,7 @@ public final class GlucoseSync {
             putDataMapRequest.getDataMap().putInt(TREND_ARROW_KEY, gm.TrendArrow);
             putDataMapRequest.getDataMap().putInt(UNITS_KEY, gm.GlucoseUnits);
             putDataMapRequest.getDataMap().putString(TIMESTAMP_KEY, gm.FactoryTimestamp);
-            PutDataRequest putDataRequest = putDataMapRequest.asPutDataRequest();
+            PutDataRequest putDataRequest = putDataMapRequest.asPutDataRequest().setUrgent();
             Tasks.await(dataClient.putDataItem(putDataRequest));
 
             Log.i(
