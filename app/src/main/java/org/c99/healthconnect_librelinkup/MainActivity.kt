@@ -97,7 +97,9 @@ data class LoginUiState(
     var password: String = "",
     var status: String = "",
     var version: String = "Version",
-    var isIgnoringBatteryOptimizations: Boolean = false
+    var isIgnoringBatteryOptimizations: Boolean = false,
+    var syncMode: String = LibreLinkUp.SYNC_MODE_STANDARD,
+    var fastSyncIntervalMinutes: Int = LibreLinkUp.DEFAULT_FAST_SYNC_INTERVAL_MINUTES
 )
 
 class LoginViewModel: ViewModel() {
@@ -127,6 +129,14 @@ class LoginViewModel: ViewModel() {
     fun setIsIgnoringBatteryOptimizations(isIgnoringBatteryOptimizations: Boolean) {
         _uiState.value = _uiState.value.copy(isIgnoringBatteryOptimizations = isIgnoringBatteryOptimizations)
     }
+
+    fun setSyncMode(syncMode: String) {
+        _uiState.value = _uiState.value.copy(syncMode = syncMode)
+    }
+
+    fun setFastSyncIntervalMinutes(minutes: Int) {
+        _uiState.value = _uiState.value.copy(fastSyncIntervalMinutes = minutes)
+    }
 }
 
 class MainActivity : ComponentActivity() {
@@ -136,18 +146,23 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        libreLinkUp = LibreLinkUp(this);
+        libreLinkUp = LibreLinkUp(this)
 
         enableEdgeToEdge()
         setContent {
             MainView(
                 onUrlChanged = { libreLinkUp.setUrl(it) },
                 onLoginButtonClicked = { onLoginButtonClicked() },
-                onDisableBatteryRestrictionsButtonClicked = { onDisableBatteryRestrictionsButtonClicked() }
+                onDisableBatteryRestrictionsButtonClicked = { onDisableBatteryRestrictionsButtonClicked() },
+                onSyncModeChanged = { onSyncModeChanged(it) },
+                onFastSyncIntervalChanged = { onFastSyncIntervalChanged(it) }
             )
         }
 
         viewModel.setUrl(libreLinkUp.url)
+        viewModel.setSyncMode(libreLinkUp.syncMode)
+        viewModel.setFastSyncIntervalMinutes(libreLinkUp.fastSyncIntervalMinutes)
+
         val user = libreLinkUp.user
         if (user != null && user.email != null) {
             viewModel.setEmail(user.email)
@@ -229,32 +244,48 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("BatteryLife")
     private fun onDisableBatteryRestrictionsButtonClicked() {
-        val intent = android.content.Intent()
-        intent.setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-        intent.setData(android.net.Uri.parse("package:$packageName"))
+        val intent = Intent()
+        intent.action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+        intent.data = Uri.parse("package:$packageName")
         startActivity(intent)
+    }
+
+    private fun onSyncModeChanged(mode: String) {
+        libreLinkUp.syncMode = mode
+        viewModel.setSyncMode(libreLinkUp.syncMode)
+        libreLinkUp.applySyncSettings()
+    }
+
+    private fun onFastSyncIntervalChanged(minutes: Int) {
+        libreLinkUp.fastSyncIntervalMinutes = minutes
+        viewModel.setFastSyncIntervalMinutes(libreLinkUp.fastSyncIntervalMinutes)
+        if (LibreLinkUp.SYNC_MODE_FAST == libreLinkUp.syncMode) {
+            libreLinkUp.applySyncSettings()
+        }
     }
 
     private fun onLoginButtonClicked() {
         if (viewModel.uiState.value.email.isNotBlank() && viewModel.uiState.value.password.isNotBlank()) {
             CoroutineScope(Dispatchers.Default).launch {
-                val loginResult =
-                    libreLinkUp.login(viewModel.uiState.value.email, viewModel.uiState.value.password)
-                if (loginResult != null && loginResult.status == 0) {
-                    libreLinkUp.authTicket = loginResult.data.authTicket
-                    libreLinkUp.user = loginResult.data.user
-                    CoroutineScope(Dispatchers.Main).launch {
-                        libreLinkUp.schedule()
+                try {
+                    val loginResult =
+                        libreLinkUp.login(viewModel.uiState.value.email, viewModel.uiState.value.password)
+                    if (loginResult != null && loginResult.status == 0 && loginResult.data != null) {
+                        libreLinkUp.authTicket = loginResult.data.authTicket
+                        libreLinkUp.user = loginResult.data.user
+                        CoroutineScope(Dispatchers.Main).launch {
+                            libreLinkUp.schedule()
+                        }
+                        viewModel.setStatus("Logged in as " + loginResult.data.user.firstName + " " + loginResult.data.user.lastName)
+                    } else {
+                        if (loginResult != null && loginResult.error != null) {
+                            Log.e("Libre", "Message: " + loginResult.error.message)
+                        }
+                        viewModel.setStatus("Login failed. Check your username, password, and server.")
                     }
-                    viewModel.setStatus("Logged in as " + loginResult.data.user.firstName + " " + loginResult.data.user.lastName)
-                } else {
-                    if (loginResult != null) {
-                        if (loginResult.error != null) Log.e(
-                            "Libre",
-                            "Message: " + loginResult.error.message
-                        )
-                    }
-                    viewModel.setStatus("Login failed. Check your username and password.")
+                } catch (e: Exception) {
+                    Log.e("Libre", "Login failed", e)
+                    viewModel.setStatus("Login failed. Check your connection and server selection.")
                 }
             }
         }
@@ -288,11 +319,15 @@ fun Modifier.autofill(
 fun MainView(viewModel: LoginViewModel = viewModel(),
              onUrlChanged: (String) -> Unit = {},
              onLoginButtonClicked: () -> Unit = {},
-             onDisableBatteryRestrictionsButtonClicked: () -> Unit = {}) {
+             onDisableBatteryRestrictionsButtonClicked: () -> Unit = {},
+             onSyncModeChanged: (String) -> Unit = {},
+             onFastSyncIntervalChanged: (Int) -> Unit = {}) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
     val apiEndpoints = stringArrayResource(id = R.array.api_endpoints)
-    var expanded by remember { mutableStateOf(false) }
+    var serverExpanded by remember { mutableStateOf(false) }
+    var syncModeExpanded by remember { mutableStateOf(false) }
+    var intervalExpanded by remember { mutableStateOf(false) }
 
     HealthConnectLibreLinkUpTheme {
         Scaffold(
@@ -321,8 +356,8 @@ fun MainView(viewModel: LoginViewModel = viewModel(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 ExposedDropdownMenuBox(
-                    expanded = expanded,
-                    onExpandedChange = { expanded = !expanded },
+                    expanded = serverExpanded,
+                    onExpandedChange = { serverExpanded = !serverExpanded },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     OutlinedTextField(
@@ -330,12 +365,12 @@ fun MainView(viewModel: LoginViewModel = viewModel(),
                         onValueChange = {},
                         readOnly = true,
                         label = { Text(stringResource(id = R.string.prompt_url)) },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = serverExpanded) },
                         modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
                     )
                     ExposedDropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
+                        expanded = serverExpanded,
+                        onDismissRequest = { serverExpanded = false }
                     ) {
                         apiEndpoints.forEach { endpoint ->
                             DropdownMenuItem(
@@ -343,7 +378,7 @@ fun MainView(viewModel: LoginViewModel = viewModel(),
                                 onClick = {
                                     viewModel.setUrl(endpoint)
                                     onUrlChanged(endpoint)
-                                    expanded = false
+                                    serverExpanded = false
                                 }
                             )
                         }
@@ -366,7 +401,7 @@ fun MainView(viewModel: LoginViewModel = viewModel(),
                     onValueChange = { viewModel.setPassword(it) },
                     label = { Text(stringResource(id = R.string.prompt_password)) },
                     singleLine = true,
-                    visualTransformation =  PasswordVisualTransformation(),
+                    visualTransformation = PasswordVisualTransformation(),
                     keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus(); onLoginButtonClicked(); }),
                     keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done, keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth().autofill(
@@ -380,6 +415,93 @@ fun MainView(viewModel: LoginViewModel = viewModel(),
                     Text(stringResource(id = R.string.button_login))
                 }
                 Text(uiState.status)
+
+                ExposedDropdownMenuBox(
+                    expanded = syncModeExpanded,
+                    onExpandedChange = { syncModeExpanded = !syncModeExpanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = if (uiState.syncMode == LibreLinkUp.SYNC_MODE_FAST) {
+                            stringResource(id = R.string.sync_mode_fast)
+                        } else {
+                            stringResource(id = R.string.sync_mode_standard)
+                        },
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(stringResource(id = R.string.sync_mode_label)) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = syncModeExpanded) },
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = syncModeExpanded,
+                        onDismissRequest = { syncModeExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(id = R.string.sync_mode_standard)) },
+                            onClick = {
+                                viewModel.setSyncMode(LibreLinkUp.SYNC_MODE_STANDARD)
+                                onSyncModeChanged(LibreLinkUp.SYNC_MODE_STANDARD)
+                                syncModeExpanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(id = R.string.sync_mode_fast)) },
+                            onClick = {
+                                viewModel.setSyncMode(LibreLinkUp.SYNC_MODE_FAST)
+                                onSyncModeChanged(LibreLinkUp.SYNC_MODE_FAST)
+                                syncModeExpanded = false
+                            }
+                        )
+                    }
+                }
+
+                if (uiState.syncMode == LibreLinkUp.SYNC_MODE_FAST) {
+                    ExposedDropdownMenuBox(
+                        expanded = intervalExpanded,
+                        onExpandedChange = { intervalExpanded = !intervalExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = stringResource(
+                                id = R.string.fast_sync_interval_value,
+                                uiState.fastSyncIntervalMinutes
+                            ),
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text(stringResource(id = R.string.fast_sync_interval_label)) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = intervalExpanded) },
+                            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = intervalExpanded,
+                            onDismissRequest = { intervalExpanded = false }
+                        ) {
+                            listOf(5, 10, 15).forEach { minutes ->
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(id = R.string.fast_sync_interval_value, minutes)) },
+                                    onClick = {
+                                        viewModel.setFastSyncIntervalMinutes(minutes)
+                                        onFastSyncIntervalChanged(minutes)
+                                        intervalExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = stringResource(id = R.string.fast_sync_explanation),
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center
+                    )
+                } else {
+                    Text(
+                        text = stringResource(id = R.string.standard_sync_explanation),
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
                 Spacer(Modifier.weight(1f))
                 if(!uiState.isIgnoringBatteryOptimizations) {
                     Text(
