@@ -30,7 +30,7 @@
     <string name="standard_sync_explanation">Standard uses Android background scheduling at a 15-minute interval. Android may batch or delay background work.</string>
     <string name="fast_sync_interval_label">Fast sync interval</string>
     <string name="fast_sync_interval_value">%1$d minutes</string>
-    <string name="fast_sync_explanation">Fast mode uses a foreground service for more dependable updates and keeps a persistent notification visible.</string>
+    <string name="fast_sync_explanation">Fast mode uses a foreground service for more dependable updates. If notification permission is disabled on Android 13 or later, the service can continue running without a persistent notification in the normal notification drawer.</string>
     <string-array name="api_endpoints">
         <item>https://api.libreview.io</item>
         <item>https://api-ae.libreview.io</item>
