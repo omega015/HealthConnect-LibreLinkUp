@@ -154,15 +154,17 @@ class MainActivity : ComponentActivity() {
 
     private val requestNotificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) {
-                applySyncMode(LibreLinkUp.SYNC_MODE_FAST)
-            } else {
-                viewModel.setSyncMode(libreLinkUp.syncMode)
+            applySyncMode(LibreLinkUp.SYNC_MODE_FAST)
+            if (!granted) {
                 Toast.makeText(
                     this,
-                    "Fast sync needs notification permission to show its persistent status notification.",
+                    "Fast sync is enabled without notification permission. Android may still show the service under Active apps.",
                     Toast.LENGTH_LONG
                 ).show()
+                Log.i(
+                    "LibreLinkUp",
+                    "Fast sync enabled without notification permission; foreground service notification hidden from notification drawer"
+                )
             }
         }
 
