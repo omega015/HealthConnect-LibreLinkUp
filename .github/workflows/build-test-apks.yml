@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      ANDROID_USER_HOME: /home/runner/.android
 
     steps:
       - name: Check out repository
@@ -29,8 +31,28 @@ jobs:
       - name: Restore debug signing key
         uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
-          key: ${{ runner.os }}-android-debug-keystore-v1
+          path: /home/runner/.android/debug.keystore
+          key: ${{ runner.os }}-android-debug-keystore-v2
+
+      - name: Ensure persistent debug signing key
+        shell: bash
+        run: |
+          mkdir -p "$ANDROID_USER_HOME"
+          if [ ! -f "$ANDROID_USER_HOME/debug.keystore" ]; then
+            keytool -genkeypair \
+              -keystore "$ANDROID_USER_HOME/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          keytool -list -v \
+            -keystore "$ANDROID_USER_HOME/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey | grep -E "SHA256:|Valid from:"
 
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
