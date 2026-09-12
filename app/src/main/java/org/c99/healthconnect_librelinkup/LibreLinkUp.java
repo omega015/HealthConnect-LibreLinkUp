@@ -116,7 +116,7 @@ public class LibreLinkUp {
     }
 
     private int sanitizeFastInterval(int minutes) {
-        if (minutes == 10 || minutes == 15) {
+        if (minutes == 2 || minutes == 3 || minutes == 5 || minutes == 10 || minutes == 15 || minutes == 30) {
             return minutes;
         }
         return DEFAULT_FAST_SYNC_INTERVAL_MINUTES;
@@ -336,6 +336,7 @@ public class LibreLinkUp {
 
         Request request = new Request.Builder()
                 .url(LIBRELINKUP_URL + "/llu/connections")
+                .headers(LIBRELINKUP_HEADERS)
                 .headers(headers)
                 .build();
 
