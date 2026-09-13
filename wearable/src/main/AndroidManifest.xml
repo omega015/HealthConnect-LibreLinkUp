@@ -38,6 +38,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <receiver
+            android:name=".GlucoseAlertActionReceiver"
+            android:exported="false" />
         <service
             android:name=".complication.GlucoseComplicationService"
             android:exported="true"
