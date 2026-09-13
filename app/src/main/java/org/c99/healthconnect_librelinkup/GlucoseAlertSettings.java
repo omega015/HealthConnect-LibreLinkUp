@@ -205,6 +205,8 @@ public final class GlucoseAlertSettings {
 
     private static int sanitizeRepeatInterval(int minutes) {
         switch (minutes) {
+            case 1:
+            case 2:
             case 5:
             case 10:
             case 15:
