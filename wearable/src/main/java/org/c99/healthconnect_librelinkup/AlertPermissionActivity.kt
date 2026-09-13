@@ -23,6 +23,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
@@ -128,7 +129,7 @@ class AlertPermissionActivity : Activity() {
         statusText.text = getString(
             if (granted) R.string.alert_permission_enabled else R.string.alert_permission_denied
         )
-        enableButton.isEnabled = !granted
+        enableButton.visibility = if (granted) View.GONE else View.VISIBLE
     }
 
     companion object {
