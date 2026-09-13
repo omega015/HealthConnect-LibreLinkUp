@@ -34,6 +34,7 @@ import com.google.android.gms.wearable.Wearable;
 public final class GlucoseAlertSettings {
     private static final String TAG = "LibreLinkUpAlert";
     private static final String SETTINGS_PATH = "/alert-settings";
+    public static final String SETTINGS_ACK_PATH = "/alert-settings-ack";
 
     public static final String PREFS_NAME = "glucose_alert_settings";
     public static final String KEY_LOW_ENABLED = "low_enabled";
@@ -49,7 +50,13 @@ public final class GlucoseAlertSettings {
     public static final String KEY_LOW_HYSTERESIS_MGDL = "low_hysteresis_mgdl";
     public static final String KEY_HIGH_HYSTERESIS_MGDL = "high_hysteresis_mgdl";
     public static final String KEY_DISPLAY_UNITS = "display_units";
+    public static final String KEY_REQUEST_ID = "request_id";
     private static final String KEY_UPDATED_AT = "updated_at";
+    private static final String KEY_PENDING_REQUEST_ID = "pending_request_id";
+    private static final String KEY_PENDING_SENT_AT_MS = "pending_sent_at_ms";
+    private static final String KEY_LAST_ACK_REQUEST_ID = "last_ack_request_id";
+    private static final String KEY_LAST_ACK_AT_MS = "last_ack_at_ms";
+    private static final String KEY_SEND_FAILED_REQUEST_ID = "send_failed_request_id";
 
     public static final String UNITS_MMOL = "mmol";
     public static final String UNITS_MGDL = "mgdl";
@@ -58,6 +65,15 @@ public final class GlucoseAlertSettings {
     public static final float DEFAULT_HIGH_THRESHOLD_MGDL = 180f;
     public static final float DEFAULT_HYSTERESIS_MGDL = 5f;
     public static final int DEFAULT_REPEAT_INTERVAL_MINUTES = 15;
+    public static final long WATCH_ACK_TIMEOUT_MS = 15_000L;
+
+    public enum WatchSyncStatus {
+        IDLE,
+        WAITING,
+        CONFIRMED,
+        NOT_CONFIRMED,
+        SEND_FAILED
+    }
 
     private final Context context;
     private final SharedPreferences preferences;
@@ -174,7 +190,20 @@ public final class GlucoseAlertSettings {
         sendToWear();
     }
 
+    public void retrySendToWear() {
+        sendToWear();
+    }
+
     public void sendToWear() {
+        long now = System.currentTimeMillis();
+        long previousRequestId = preferences.getLong(KEY_PENDING_REQUEST_ID, 0L);
+        long requestId = Math.max(now, previousRequestId + 1L);
+
+        preferences.edit()
+                .putLong(KEY_PENDING_REQUEST_ID, requestId)
+                .putLong(KEY_PENDING_SENT_AT_MS, now)
+                .apply();
+
         PutDataMapRequest request = PutDataMapRequest.create(SETTINGS_PATH);
         request.getDataMap().putBoolean(KEY_LOW_ENABLED, isLowEnabled());
         request.getDataMap().putBoolean(KEY_HIGH_ENABLED, isHighEnabled());
@@ -200,14 +229,16 @@ public final class GlucoseAlertSettings {
         );
         request.getDataMap().putFloat(KEY_LOW_HYSTERESIS_MGDL, getLowHysteresisMgDl());
         request.getDataMap().putFloat(KEY_HIGH_HYSTERESIS_MGDL, getHighHysteresisMgDl());
-        request.getDataMap().putLong(KEY_UPDATED_AT, System.currentTimeMillis());
+        request.getDataMap().putLong(KEY_REQUEST_ID, requestId);
+        request.getDataMap().putLong(KEY_UPDATED_AT, now);
 
         PutDataRequest putDataRequest = request.asPutDataRequest().setUrgent();
         DataClient dataClient = Wearable.getDataClient(context);
         dataClient.putDataItem(putDataRequest)
                 .addOnSuccessListener(dataItem -> Log.i(
                         TAG,
-                        "Alert settings queued for Wear: low=" + isLowEnabled()
+                        "Alert settings queued for Wear requestId=" + requestId
+                                + ": low=" + isLowEnabled()
                                 + " threshold=" + getLowThresholdMgDl()
                                 + "mg/dL persistentVibration=" + isLowPersistentVibrationEnabled()
                                 + " repeat=" + isLowRepeatEnabled()
@@ -220,11 +251,60 @@ public final class GlucoseAlertSettings {
                                 + "/" + getHighRepeatIntervalMinutes() + "m"
                                 + " hysteresis=" + getHighHysteresisMgDl() + "mg/dL"
                 ))
-                .addOnFailureListener(exception -> Log.e(
-                        TAG,
-                        "Failed to send alert settings to Wear",
-                        exception
-                ));
+                .addOnFailureListener(exception -> {
+                    preferences.edit()
+                            .putLong(KEY_SEND_FAILED_REQUEST_ID, requestId)
+                            .apply();
+                    Log.e(
+                            TAG,
+                            "Failed to queue alert settings for Wear requestId=" + requestId,
+                            exception
+                    );
+                });
+    }
+
+    public void recordWatchAcknowledgement(long requestId) {
+        if (requestId <= 0L) return;
+
+        long lastAckRequestId = preferences.getLong(KEY_LAST_ACK_REQUEST_ID, 0L);
+        if (requestId < lastAckRequestId) {
+            Log.i(TAG, "Ignoring stale Wear acknowledgement requestId=" + requestId);
+            return;
+        }
+
+        preferences.edit()
+                .putLong(KEY_LAST_ACK_REQUEST_ID, requestId)
+                .putLong(KEY_LAST_ACK_AT_MS, System.currentTimeMillis())
+                .apply();
+
+        long pendingRequestId = preferences.getLong(KEY_PENDING_REQUEST_ID, 0L);
+        if (requestId == pendingRequestId) {
+            Log.i(TAG, "Alert settings confirmed on Wear requestId=" + requestId);
+        } else {
+            Log.i(
+                    TAG,
+                    "Wear acknowledged older alert settings requestId=" + requestId
+                            + " while pending requestId=" + pendingRequestId
+            );
+        }
+    }
+
+    public WatchSyncStatus getWatchSyncStatus() {
+        long pendingRequestId = preferences.getLong(KEY_PENDING_REQUEST_ID, 0L);
+        if (pendingRequestId <= 0L) return WatchSyncStatus.IDLE;
+
+        if (preferences.getLong(KEY_LAST_ACK_REQUEST_ID, 0L) == pendingRequestId) {
+            return WatchSyncStatus.CONFIRMED;
+        }
+        if (preferences.getLong(KEY_SEND_FAILED_REQUEST_ID, 0L) == pendingRequestId) {
+            return WatchSyncStatus.SEND_FAILED;
+        }
+
+        long sentAt = preferences.getLong(KEY_PENDING_SENT_AT_MS, 0L);
+        if (sentAt > 0L && System.currentTimeMillis() - sentAt >= WATCH_ACK_TIMEOUT_MS) {
+            return WatchSyncStatus.NOT_CONFIRMED;
+        }
+        return WatchSyncStatus.WAITING;
     }
 
     private static int sanitizeRepeatInterval(int minutes) {
