@@ -113,6 +113,12 @@ data class LoginUiState(
     var highAlertEnabled: Boolean = false,
     var lowAlertThreshold: String = "3.9",
     var highAlertThreshold: String = "10.0",
+    var lowRepeatEnabled: Boolean = false,
+    var highRepeatEnabled: Boolean = false,
+    var lowRepeatIntervalMinutes: Int = GlucoseAlertSettings.DEFAULT_REPEAT_INTERVAL_MINUTES,
+    var highRepeatIntervalMinutes: Int = GlucoseAlertSettings.DEFAULT_REPEAT_INTERVAL_MINUTES,
+    var lowHysteresis: String = "0.3",
+    var highHysteresis: String = "0.3",
     var alertUnits: String = GlucoseAlertSettings.UNITS_MMOL
 )
 
@@ -144,6 +150,24 @@ class LoginViewModel: ViewModel() {
     }
     fun setHighAlertThreshold(value: String) {
         _uiState.value = _uiState.value.copy(highAlertThreshold = value)
+    }
+    fun setLowRepeatEnabled(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(lowRepeatEnabled = enabled)
+    }
+    fun setHighRepeatEnabled(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(highRepeatEnabled = enabled)
+    }
+    fun setLowRepeatIntervalMinutes(minutes: Int) {
+        _uiState.value = _uiState.value.copy(lowRepeatIntervalMinutes = minutes)
+    }
+    fun setHighRepeatIntervalMinutes(minutes: Int) {
+        _uiState.value = _uiState.value.copy(highRepeatIntervalMinutes = minutes)
+    }
+    fun setLowHysteresis(value: String) {
+        _uiState.value = _uiState.value.copy(lowHysteresis = value)
+    }
+    fun setHighHysteresis(value: String) {
+        _uiState.value = _uiState.value.copy(highHysteresis = value)
     }
     fun setAlertUnits(units: String) { _uiState.value = _uiState.value.copy(alertUnits = units) }
 }
@@ -245,11 +269,17 @@ class MainActivity : ComponentActivity() {
         viewModel.setAlertUnits(units)
         viewModel.setLowAlertEnabled(alertSettings.isLowEnabled)
         viewModel.setHighAlertEnabled(alertSettings.isHighEnabled)
-        viewModel.setLowAlertThreshold(formatThreshold(alertSettings.lowThresholdMgDl, units))
-        viewModel.setHighAlertThreshold(formatThreshold(alertSettings.highThresholdMgDl, units))
+        viewModel.setLowAlertThreshold(formatValue(alertSettings.lowThresholdMgDl, units))
+        viewModel.setHighAlertThreshold(formatValue(alertSettings.highThresholdMgDl, units))
+        viewModel.setLowRepeatEnabled(alertSettings.isLowRepeatEnabled)
+        viewModel.setHighRepeatEnabled(alertSettings.isHighRepeatEnabled)
+        viewModel.setLowRepeatIntervalMinutes(alertSettings.lowRepeatIntervalMinutes)
+        viewModel.setHighRepeatIntervalMinutes(alertSettings.highRepeatIntervalMinutes)
+        viewModel.setLowHysteresis(formatValue(alertSettings.lowHysteresisMgDl, units))
+        viewModel.setHighHysteresis(formatValue(alertSettings.highHysteresisMgDl, units))
     }
 
-    private fun formatThreshold(mgDl: Float, units: String): String {
+    private fun formatValue(mgDl: Float, units: String): String {
         return if (units == GlucoseAlertSettings.UNITS_MGDL) {
             String.format(Locale.US, "%.0f", mgDl)
         } else {
@@ -257,9 +287,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun thresholdToMgDl(value: String, units: String): Float? {
+    private fun valueToMgDl(value: String, units: String, allowZero: Boolean = false): Float? {
         val parsed = value.trim().replace(',', '.').toFloatOrNull() ?: return null
-        if (parsed <= 0f) return null
+        if ((!allowZero && parsed <= 0f) || (allowZero && parsed < 0f)) return null
         return if (units == GlucoseAlertSettings.UNITS_MGDL) parsed else parsed * 18f
     }
 
@@ -267,19 +297,31 @@ class MainActivity : ComponentActivity() {
         val state = viewModel.uiState.value
         if (state.alertUnits == newUnits) return
 
-        val lowMgDl = thresholdToMgDl(state.lowAlertThreshold, state.alertUnits)
-        val highMgDl = thresholdToMgDl(state.highAlertThreshold, state.alertUnits)
+        val lowMgDl = valueToMgDl(state.lowAlertThreshold, state.alertUnits)
+        val highMgDl = valueToMgDl(state.highAlertThreshold, state.alertUnits)
+        val lowHysteresisMgDl = valueToMgDl(state.lowHysteresis, state.alertUnits, true)
+        val highHysteresisMgDl = valueToMgDl(state.highHysteresis, state.alertUnits, true)
         viewModel.setAlertUnits(newUnits)
-        if (lowMgDl != null) viewModel.setLowAlertThreshold(formatThreshold(lowMgDl, newUnits))
-        if (highMgDl != null) viewModel.setHighAlertThreshold(formatThreshold(highMgDl, newUnits))
+        if (lowMgDl != null) viewModel.setLowAlertThreshold(formatValue(lowMgDl, newUnits))
+        if (highMgDl != null) viewModel.setHighAlertThreshold(formatValue(highMgDl, newUnits))
+        if (lowHysteresisMgDl != null) viewModel.setLowHysteresis(formatValue(lowHysteresisMgDl, newUnits))
+        if (highHysteresisMgDl != null) viewModel.setHighHysteresis(formatValue(highHysteresisMgDl, newUnits))
     }
 
     private fun onSaveAlertSettings() {
         val state = viewModel.uiState.value
-        val lowMgDl = thresholdToMgDl(state.lowAlertThreshold, state.alertUnits)
-        val highMgDl = thresholdToMgDl(state.highAlertThreshold, state.alertUnits)
+        val lowMgDl = valueToMgDl(state.lowAlertThreshold, state.alertUnits)
+        val highMgDl = valueToMgDl(state.highAlertThreshold, state.alertUnits)
+        val lowHysteresisMgDl = valueToMgDl(state.lowHysteresis, state.alertUnits, true)
+        val highHysteresisMgDl = valueToMgDl(state.highHysteresis, state.alertUnits, true)
 
-        if (lowMgDl == null || highMgDl == null || lowMgDl >= highMgDl) {
+        if (
+            lowMgDl == null ||
+            highMgDl == null ||
+            lowHysteresisMgDl == null ||
+            highHysteresisMgDl == null ||
+            lowMgDl >= highMgDl
+        ) {
             Toast.makeText(this, getString(R.string.alert_settings_invalid), Toast.LENGTH_LONG).show()
             return
         }
@@ -287,8 +329,14 @@ class MainActivity : ComponentActivity() {
         alertSettings.saveAndSend(
             state.lowAlertEnabled,
             lowMgDl,
+            state.lowRepeatEnabled,
+            state.lowRepeatIntervalMinutes,
+            lowHysteresisMgDl,
             state.highAlertEnabled,
             highMgDl,
+            state.highRepeatEnabled,
+            state.highRepeatIntervalMinutes,
+            highHysteresisMgDl,
             state.alertUnits
         )
         Toast.makeText(this, getString(R.string.alert_settings_saved), Toast.LENGTH_SHORT).show()
@@ -458,6 +506,8 @@ fun MainView(
     var syncModeExpanded by remember { mutableStateOf(false) }
     var intervalExpanded by remember { mutableStateOf(false) }
     var alertUnitsExpanded by remember { mutableStateOf(false) }
+    var lowRepeatExpanded by remember { mutableStateOf(false) }
+    var highRepeatExpanded by remember { mutableStateOf(false) }
 
     HealthConnectLibreLinkUpTheme {
         Scaffold(
@@ -725,12 +775,62 @@ fun MainView(
                     onValueChange = { viewModel.setLowAlertThreshold(it) },
                     enabled = uiState.lowAlertEnabled,
                     label = { Text(stringResource(id = R.string.low_alert_threshold)) },
-                    suffix = {
-                        Text(
-                            if (uiState.alertUnits == GlucoseAlertSettings.UNITS_MGDL) "mg/dL"
-                            else "mmol/L"
-                        )
+                    suffix = { Text(if (uiState.alertUnits == GlucoseAlertSettings.UNITS_MGDL) "mg/dL" else "mmol/L") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(stringResource(id = R.string.repeat_alert))
+                    Switch(
+                        checked = uiState.lowRepeatEnabled,
+                        onCheckedChange = { viewModel.setLowRepeatEnabled(it) },
+                        enabled = uiState.lowAlertEnabled
+                    )
+                }
+                ExposedDropdownMenuBox(
+                    expanded = lowRepeatExpanded,
+                    onExpandedChange = {
+                        if (uiState.lowAlertEnabled && uiState.lowRepeatEnabled) {
+                            lowRepeatExpanded = !lowRepeatExpanded
+                        }
                     },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = stringResource(id = R.string.repeat_interval_value, uiState.lowRepeatIntervalMinutes),
+                        onValueChange = {},
+                        readOnly = true,
+                        enabled = uiState.lowAlertEnabled && uiState.lowRepeatEnabled,
+                        label = { Text(stringResource(id = R.string.repeat_interval)) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = lowRepeatExpanded) },
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = lowRepeatExpanded,
+                        onDismissRequest = { lowRepeatExpanded = false }
+                    ) {
+                        listOf(5, 10, 15, 30, 60).forEach { minutes ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(id = R.string.repeat_interval_value, minutes)) },
+                                onClick = {
+                                    viewModel.setLowRepeatIntervalMinutes(minutes)
+                                    lowRepeatExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = uiState.lowHysteresis,
+                    onValueChange = { viewModel.setLowHysteresis(it) },
+                    enabled = uiState.lowAlertEnabled,
+                    label = { Text(stringResource(id = R.string.rearm_margin)) },
+                    suffix = { Text(if (uiState.alertUnits == GlucoseAlertSettings.UNITS_MGDL) "mg/dL" else "mmol/L") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
@@ -752,12 +852,62 @@ fun MainView(
                     onValueChange = { viewModel.setHighAlertThreshold(it) },
                     enabled = uiState.highAlertEnabled,
                     label = { Text(stringResource(id = R.string.high_alert_threshold)) },
-                    suffix = {
-                        Text(
-                            if (uiState.alertUnits == GlucoseAlertSettings.UNITS_MGDL) "mg/dL"
-                            else "mmol/L"
-                        )
+                    suffix = { Text(if (uiState.alertUnits == GlucoseAlertSettings.UNITS_MGDL) "mg/dL" else "mmol/L") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(stringResource(id = R.string.repeat_alert))
+                    Switch(
+                        checked = uiState.highRepeatEnabled,
+                        onCheckedChange = { viewModel.setHighRepeatEnabled(it) },
+                        enabled = uiState.highAlertEnabled
+                    )
+                }
+                ExposedDropdownMenuBox(
+                    expanded = highRepeatExpanded,
+                    onExpandedChange = {
+                        if (uiState.highAlertEnabled && uiState.highRepeatEnabled) {
+                            highRepeatExpanded = !highRepeatExpanded
+                        }
                     },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = stringResource(id = R.string.repeat_interval_value, uiState.highRepeatIntervalMinutes),
+                        onValueChange = {},
+                        readOnly = true,
+                        enabled = uiState.highAlertEnabled && uiState.highRepeatEnabled,
+                        label = { Text(stringResource(id = R.string.repeat_interval)) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = highRepeatExpanded) },
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = highRepeatExpanded,
+                        onDismissRequest = { highRepeatExpanded = false }
+                    ) {
+                        listOf(5, 10, 15, 30, 60).forEach { minutes ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(id = R.string.repeat_interval_value, minutes)) },
+                                onClick = {
+                                    viewModel.setHighRepeatIntervalMinutes(minutes)
+                                    highRepeatExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = uiState.highHysteresis,
+                    onValueChange = { viewModel.setHighHysteresis(it) },
+                    enabled = uiState.highAlertEnabled,
+                    label = { Text(stringResource(id = R.string.rearm_margin)) },
+                    suffix = { Text(if (uiState.alertUnits == GlucoseAlertSettings.UNITS_MGDL) "mg/dL" else "mmol/L") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
