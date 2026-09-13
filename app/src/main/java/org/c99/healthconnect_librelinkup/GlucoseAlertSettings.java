@@ -60,6 +60,7 @@ public final class GlucoseAlertSettings {
     private static final String KEY_LAST_ACK_REQUEST_ID = "last_ack_request_id";
     private static final String KEY_LAST_ACK_AT_MS = "last_ack_at_ms";
     private static final String KEY_SEND_FAILED_REQUEST_ID = "send_failed_request_id";
+    private static final String KEY_NOTIFY_REQUEST_ID = "notify_request_id";
 
     public static final String UNITS_MMOL = "mmol";
     public static final String UNITS_MGDL = "mgdl";
@@ -191,27 +192,30 @@ public final class GlucoseAlertSettings {
                 .putString(KEY_DISPLAY_UNITS, displayUnits)
                 .apply();
 
-        sendToWearInternal(false);
+        sendToWearInternal(false, true);
     }
 
     public void retrySendToWear() {
-        sendToWearInternal(false);
+        sendToWearInternal(false, true);
     }
 
     public void sendToWear() {
-        sendToWearInternal(false);
+        sendToWearInternal(false, false);
     }
 
-    private void sendToWearInternal(boolean automaticRetry) {
+    private void sendToWearInternal(boolean automaticRetry, boolean userInitiated) {
         long now = System.currentTimeMillis();
         long previousRequestId = preferences.getLong(KEY_PENDING_REQUEST_ID, 0L);
         long requestId = Math.max(now, previousRequestId + 1L);
 
-        preferences.edit()
+        SharedPreferences.Editor pendingEditor = preferences.edit()
                 .putLong(KEY_PENDING_REQUEST_ID, requestId)
                 .putLong(KEY_PENDING_SENT_AT_MS, now)
-                .remove(KEY_SEND_FAILED_REQUEST_ID)
-                .apply();
+                .remove(KEY_SEND_FAILED_REQUEST_ID);
+        if (userInitiated) {
+            pendingEditor.putLong(KEY_NOTIFY_REQUEST_ID, requestId);
+        }
+        pendingEditor.apply();
 
         PutDataMapRequest request = PutDataMapRequest.create(SETTINGS_PATH);
         request.getDataMap().putBoolean(KEY_LOW_ENABLED, isLowEnabled());
@@ -261,7 +265,7 @@ public final class GlucoseAlertSettings {
                                     + "/" + getHighRepeatIntervalMinutes() + "m"
                                     + " hysteresis=" + getHighHysteresisMgDl() + "mg/dL"
                     );
-                    scheduleConfirmationCheck(requestId, automaticRetry);
+                    scheduleConfirmationCheck(requestId, automaticRetry, userInitiated);
                 })
                 .addOnFailureListener(exception -> {
                     preferences.edit()
@@ -272,15 +276,20 @@ public final class GlucoseAlertSettings {
                             "Failed to queue alert settings for Wear requestId=" + requestId,
                             exception
                     );
-                    mainHandler.post(() -> Toast.makeText(
-                            context,
-                            "Could not send alert settings to watch. Phone settings were kept.",
-                            Toast.LENGTH_LONG
-                    ).show());
+                    if (userInitiated) {
+                        mainHandler.post(() -> Toast.makeText(
+                                context,
+                                "Could not send alert settings to watch. Phone settings were kept.",
+                                Toast.LENGTH_LONG
+                        ).show());
+                    }
                 });
     }
 
-    private void scheduleConfirmationCheck(long requestId, boolean automaticRetry) {
+    private void scheduleConfirmationCheck(
+            long requestId,
+            boolean automaticRetry,
+            boolean userInitiated) {
         mainHandler.postDelayed(() -> {
             long pendingRequestId = preferences.getLong(KEY_PENDING_REQUEST_ID, 0L);
             if (pendingRequestId != requestId) return;
@@ -288,39 +297,48 @@ public final class GlucoseAlertSettings {
 
             if (!automaticRetry) {
                 Log.w(TAG, "Wear did not confirm alert settings requestId=" + requestId + "; retrying once");
-                Toast.makeText(
-                        context,
-                        "Watch not confirmed. Retrying alert settings...",
-                        Toast.LENGTH_LONG
-                ).show();
-                sendToWearInternal(true);
+                if (userInitiated) {
+                    Toast.makeText(
+                            context,
+                            "Watch not confirmed. Retrying alert settings...",
+                            Toast.LENGTH_LONG
+                    ).show();
+                }
+                sendToWearInternal(true, userInitiated);
             } else {
                 Log.w(TAG, "Wear did not confirm alert settings after retry requestId=" + requestId);
-                Toast.makeText(
-                        context,
-                        "Watch not confirmed. Phone settings were kept; the watch may still be using its previous settings.",
-                        Toast.LENGTH_LONG
-                ).show();
+                if (userInitiated) {
+                    Toast.makeText(
+                            context,
+                            "Watch not confirmed. Phone settings were kept; the watch may still be using its previous settings.",
+                            Toast.LENGTH_LONG
+                    ).show();
+                }
             }
         }, WATCH_ACK_TIMEOUT_MS);
     }
 
-    public void recordWatchAcknowledgement(long requestId) {
-        if (requestId <= 0L) return;
+    public boolean recordWatchAcknowledgement(long requestId) {
+        if (requestId <= 0L) return false;
 
         long lastAckRequestId = preferences.getLong(KEY_LAST_ACK_REQUEST_ID, 0L);
         if (requestId < lastAckRequestId) {
             Log.i(TAG, "Ignoring stale Wear acknowledgement requestId=" + requestId);
-            return;
+            return false;
         }
 
-        preferences.edit()
-                .putLong(KEY_LAST_ACK_REQUEST_ID, requestId)
-                .putLong(KEY_LAST_ACK_AT_MS, System.currentTimeMillis())
-                .apply();
-
         long pendingRequestId = preferences.getLong(KEY_PENDING_REQUEST_ID, 0L);
-        if (requestId == pendingRequestId) {
+        boolean currentRequest = requestId == pendingRequestId;
+        boolean notifyUser = currentRequest &&
+                preferences.getLong(KEY_NOTIFY_REQUEST_ID, 0L) == requestId;
+
+        SharedPreferences.Editor editor = preferences.edit()
+                .putLong(KEY_LAST_ACK_REQUEST_ID, requestId)
+                .putLong(KEY_LAST_ACK_AT_MS, System.currentTimeMillis());
+        if (notifyUser) editor.remove(KEY_NOTIFY_REQUEST_ID);
+        editor.apply();
+
+        if (currentRequest) {
             Log.i(TAG, "Alert settings confirmed on Wear requestId=" + requestId);
         } else {
             Log.i(
@@ -329,6 +347,7 @@ public final class GlucoseAlertSettings {
                             + " while pending requestId=" + pendingRequestId
             );
         }
+        return notifyUser;
     }
 
     public WatchSyncStatus getWatchSyncStatus() {
