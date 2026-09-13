@@ -17,6 +17,7 @@
 package org.c99.healthconnect_librelinkup
 
 import android.util.Log
+import android.widget.Toast
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMapItem
@@ -36,8 +37,17 @@ class AlertSettingsAckListenerService : WearableListenerService() {
             if (!dataMap.containsKey(GlucoseAlertSettings.KEY_REQUEST_ID)) continue
 
             val requestId = dataMap.getLong(GlucoseAlertSettings.KEY_REQUEST_ID)
-            GlucoseAlertSettings(applicationContext).recordWatchAcknowledgement(requestId)
+            val notifyUser = GlucoseAlertSettings(applicationContext)
+                .recordWatchAcknowledgement(requestId)
             Log.i(TAG, "Received Wear alert settings acknowledgement requestId=$requestId")
+
+            if (notifyUser) {
+                Toast.makeText(
+                    applicationContext,
+                    "Alert settings confirmed on watch.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         }
     }
 }
