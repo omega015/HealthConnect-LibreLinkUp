@@ -87,7 +87,33 @@ class DataLayerListenerService : WearableListenerService() {
                             GlucoseAlertManager.KEY_HIGH_THRESHOLD_MGDL,
                             dataMap.getFloat(GlucoseAlertManager.KEY_HIGH_THRESHOLD_MGDL)
                         )
+                        .putBoolean(
+                            GlucoseAlertManager.KEY_LOW_REPEAT_ENABLED,
+                            dataMap.getBoolean(GlucoseAlertManager.KEY_LOW_REPEAT_ENABLED)
+                        )
+                        .putBoolean(
+                            GlucoseAlertManager.KEY_HIGH_REPEAT_ENABLED,
+                            dataMap.getBoolean(GlucoseAlertManager.KEY_HIGH_REPEAT_ENABLED)
+                        )
+                        .putInt(
+                            GlucoseAlertManager.KEY_LOW_REPEAT_INTERVAL_MINUTES,
+                            dataMap.getInt(GlucoseAlertManager.KEY_LOW_REPEAT_INTERVAL_MINUTES)
+                        )
+                        .putInt(
+                            GlucoseAlertManager.KEY_HIGH_REPEAT_INTERVAL_MINUTES,
+                            dataMap.getInt(GlucoseAlertManager.KEY_HIGH_REPEAT_INTERVAL_MINUTES)
+                        )
+                        .putFloat(
+                            GlucoseAlertManager.KEY_LOW_HYSTERESIS_MGDL,
+                            dataMap.getFloat(GlucoseAlertManager.KEY_LOW_HYSTERESIS_MGDL)
+                        )
+                        .putFloat(
+                            GlucoseAlertManager.KEY_HIGH_HYSTERESIS_MGDL,
+                            dataMap.getFloat(GlucoseAlertManager.KEY_HIGH_HYSTERESIS_MGDL)
+                        )
                         .remove("alert_state")
+                        .remove("last_low_alert_time_ms")
+                        .remove("last_high_alert_time_ms")
                         .apply()
 
                     Log.i(
@@ -96,10 +122,20 @@ class DataLayerListenerService : WearableListenerService() {
                             dataMap.getBoolean(GlucoseAlertManager.KEY_LOW_ENABLED) +
                             " threshold=" +
                             dataMap.getFloat(GlucoseAlertManager.KEY_LOW_THRESHOLD_MGDL) +
+                            "mg/dL repeat=" +
+                            dataMap.getBoolean(GlucoseAlertManager.KEY_LOW_REPEAT_ENABLED) +
+                            "/" + dataMap.getInt(GlucoseAlertManager.KEY_LOW_REPEAT_INTERVAL_MINUTES) +
+                            "m hysteresis=" +
+                            dataMap.getFloat(GlucoseAlertManager.KEY_LOW_HYSTERESIS_MGDL) +
                             "mg/dL high=" +
                             dataMap.getBoolean(GlucoseAlertManager.KEY_HIGH_ENABLED) +
                             " threshold=" +
                             dataMap.getFloat(GlucoseAlertManager.KEY_HIGH_THRESHOLD_MGDL) +
+                            "mg/dL repeat=" +
+                            dataMap.getBoolean(GlucoseAlertManager.KEY_HIGH_REPEAT_ENABLED) +
+                            "/" + dataMap.getInt(GlucoseAlertManager.KEY_HIGH_REPEAT_INTERVAL_MINUTES) +
+                            "m hysteresis=" +
+                            dataMap.getFloat(GlucoseAlertManager.KEY_HIGH_HYSTERESIS_MGDL) +
                             "mg/dL"
                     )
                 }
