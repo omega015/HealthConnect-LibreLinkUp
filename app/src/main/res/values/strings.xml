@@ -41,6 +41,7 @@
     <string name="high_alert_enabled">High alert</string>
     <string name="low_alert_threshold">Low threshold</string>
     <string name="high_alert_threshold">High threshold</string>
+    <string name="persistent_vibration">Persistent vibration until acknowledged</string>
     <string name="repeat_alert">Repeat while still out of range</string>
     <string name="repeat_interval">Repeat interval</string>
     <string name="repeat_interval_value">%1$d minutes</string>
