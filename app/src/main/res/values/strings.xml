@@ -31,6 +31,18 @@
     <string name="fast_sync_interval_label">Fast sync interval</string>
     <string name="fast_sync_interval_value">%1$d minutes</string>
     <string name="fast_sync_explanation">Fast mode uses a foreground service for more dependable updates. To show or hide the Fast sync notification, use Android Settings → Apps → LibreLinkUp for HealthConnect → Notifications. Fast sync continues to work when notifications are disabled.</string>
+    <string name="alert_settings_title">Watch glucose alerts</string>
+    <string name="alert_units_label">Alert units</string>
+    <string name="alert_units_mmol">mmol/L</string>
+    <string name="alert_units_mgdl">mg/dL</string>
+    <string name="low_alert_enabled">Low alert</string>
+    <string name="high_alert_enabled">High alert</string>
+    <string name="low_alert_threshold">Low threshold</string>
+    <string name="high_alert_threshold">High threshold</string>
+    <string name="save_alert_settings">Save &amp; send to watch</string>
+    <string name="alert_settings_saved">Alert settings sent to watch</string>
+    <string name="alert_settings_invalid">Enter valid thresholds with low below high.</string>
+    <string name="alert_settings_warning">Watch alerts depend on LibreLinkUp cloud, phone sync, and Wear connectivity. They are not a replacement for Abbott/Libre medical alarms.</string>
     <string-array name="api_endpoints">
         <item>https://api.libreview.io</item>
         <item>https://api-ae.libreview.io</item>
