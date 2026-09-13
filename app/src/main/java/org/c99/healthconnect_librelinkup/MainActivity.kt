@@ -113,6 +113,8 @@ data class LoginUiState(
     var highAlertEnabled: Boolean = false,
     var lowAlertThreshold: String = "3.9",
     var highAlertThreshold: String = "10.0",
+    var lowPersistentVibration: Boolean = false,
+    var highPersistentVibration: Boolean = false,
     var lowRepeatEnabled: Boolean = false,
     var highRepeatEnabled: Boolean = false,
     var lowRepeatIntervalMinutes: Int = GlucoseAlertSettings.DEFAULT_REPEAT_INTERVAL_MINUTES,
@@ -150,6 +152,12 @@ class LoginViewModel: ViewModel() {
     }
     fun setHighAlertThreshold(value: String) {
         _uiState.value = _uiState.value.copy(highAlertThreshold = value)
+    }
+    fun setLowPersistentVibration(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(lowPersistentVibration = enabled)
+    }
+    fun setHighPersistentVibration(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(highPersistentVibration = enabled)
     }
     fun setLowRepeatEnabled(enabled: Boolean) {
         _uiState.value = _uiState.value.copy(lowRepeatEnabled = enabled)
@@ -271,6 +279,8 @@ class MainActivity : ComponentActivity() {
         viewModel.setHighAlertEnabled(alertSettings.isHighEnabled)
         viewModel.setLowAlertThreshold(formatValue(alertSettings.lowThresholdMgDl, units))
         viewModel.setHighAlertThreshold(formatValue(alertSettings.highThresholdMgDl, units))
+        viewModel.setLowPersistentVibration(alertSettings.isLowPersistentVibrationEnabled)
+        viewModel.setHighPersistentVibration(alertSettings.isHighPersistentVibrationEnabled)
         viewModel.setLowRepeatEnabled(alertSettings.isLowRepeatEnabled)
         viewModel.setHighRepeatEnabled(alertSettings.isHighRepeatEnabled)
         viewModel.setLowRepeatIntervalMinutes(alertSettings.lowRepeatIntervalMinutes)
@@ -329,11 +339,13 @@ class MainActivity : ComponentActivity() {
         alertSettings.saveAndSend(
             state.lowAlertEnabled,
             lowMgDl,
+            state.lowPersistentVibration,
             state.lowRepeatEnabled,
             state.lowRepeatIntervalMinutes,
             lowHysteresisMgDl,
             state.highAlertEnabled,
             highMgDl,
+            state.highPersistentVibration,
             state.highRepeatEnabled,
             state.highRepeatIntervalMinutes,
             highHysteresisMgDl,
@@ -534,6 +546,11 @@ fun MainView(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                Text(
+                    text = stringResource(id = R.string.login_section_title),
+                    style = MaterialTheme.typography.titleMedium
+                )
+
                 ExposedDropdownMenuBox(
                     expanded = serverExpanded,
                     onExpandedChange = {
@@ -616,6 +633,12 @@ fun MainView(
                     }
                     Text(uiState.status)
                 }
+
+                Text(
+                    text = stringResource(id = R.string.sync_section_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
 
                 ExposedDropdownMenuBox(
                     expanded = syncModeExpanded,
@@ -785,6 +808,18 @@ fun MainView(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Text(stringResource(id = R.string.persistent_vibration))
+                    Switch(
+                        checked = uiState.lowPersistentVibration,
+                        onCheckedChange = { viewModel.setLowPersistentVibration(it) },
+                        enabled = uiState.lowAlertEnabled
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(stringResource(id = R.string.repeat_alert))
                     Switch(
                         checked = uiState.lowRepeatEnabled,
@@ -857,6 +892,18 @@ fun MainView(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(stringResource(id = R.string.persistent_vibration))
+                    Switch(
+                        checked = uiState.highPersistentVibration,
+                        onCheckedChange = { viewModel.setHighPersistentVibration(it) },
+                        enabled = uiState.highAlertEnabled
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
