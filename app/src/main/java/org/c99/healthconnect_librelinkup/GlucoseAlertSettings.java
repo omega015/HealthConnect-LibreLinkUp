@@ -192,21 +192,44 @@ public final class GlucoseAlertSettings {
                 .putString(KEY_DISPLAY_UNITS, displayUnits)
                 .apply();
 
-        sendToWearInternal(false, true);
+        sendToWearInternal(false, true, 0L, true);
     }
 
     public void retrySendToWear() {
-        sendToWearInternal(false, true);
+        sendToWearInternal(false, true, 0L, true);
     }
 
+    /**
+     * Performs the quiet sync used when the phone UI starts. If a user-initiated save is
+     * still awaiting confirmation, resend that exact request ID instead of replacing it
+     * with a new silent request. This lets a delayed acknowledgement remain attributable
+     * to the user's save after the watch reconnects.
+     */
     public void sendToWear() {
-        sendToWearInternal(false, false);
+        long notifyRequestId = preferences.getLong(KEY_NOTIFY_REQUEST_ID, 0L);
+        long lastAckRequestId = preferences.getLong(KEY_LAST_ACK_REQUEST_ID, 0L);
+        if (notifyRequestId > 0L && notifyRequestId != lastAckRequestId) {
+            Log.i(
+                    TAG,
+                    "Quiet sync preserving outstanding user requestId=" + notifyRequestId
+            );
+            sendToWearInternal(false, false, notifyRequestId, false);
+            return;
+        }
+
+        sendToWearInternal(false, false, 0L, true);
     }
 
-    private void sendToWearInternal(boolean automaticRetry, boolean userInitiated) {
+    private void sendToWearInternal(
+            boolean automaticRetry,
+            boolean userInitiated,
+            long existingRequestId,
+            boolean scheduleConfirmation) {
         long now = System.currentTimeMillis();
         long previousRequestId = preferences.getLong(KEY_PENDING_REQUEST_ID, 0L);
-        long requestId = Math.max(now, previousRequestId + 1L);
+        long requestId = existingRequestId > 0L
+                ? existingRequestId
+                : Math.max(now, previousRequestId + 1L);
 
         SharedPreferences.Editor pendingEditor = preferences.edit()
                 .putLong(KEY_PENDING_REQUEST_ID, requestId)
@@ -265,7 +288,9 @@ public final class GlucoseAlertSettings {
                                     + "/" + getHighRepeatIntervalMinutes() + "m"
                                     + " hysteresis=" + getHighHysteresisMgDl() + "mg/dL"
                     );
-                    scheduleConfirmationCheck(requestId, automaticRetry, userInitiated);
+                    if (scheduleConfirmation) {
+                        scheduleConfirmationCheck(requestId, automaticRetry, userInitiated);
+                    }
                 })
                 .addOnFailureListener(exception -> {
                     preferences.edit()
@@ -304,7 +329,7 @@ public final class GlucoseAlertSettings {
                             Toast.LENGTH_LONG
                     ).show();
                 }
-                sendToWearInternal(true, userInitiated);
+                sendToWearInternal(true, userInitiated, 0L, true);
             } else {
                 Log.w(TAG, "Wear did not confirm alert settings after retry requestId=" + requestId);
                 if (userInitiated) {
