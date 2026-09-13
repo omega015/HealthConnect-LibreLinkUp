@@ -18,7 +18,10 @@ package org.c99.healthconnect_librelinkup;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
+import android.widget.Toast;
 
 import com.google.android.gms.wearable.DataClient;
 import com.google.android.gms.wearable.PutDataMapRequest;
@@ -77,6 +80,7 @@ public final class GlucoseAlertSettings {
 
     private final Context context;
     private final SharedPreferences preferences;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     public GlucoseAlertSettings(Context context) {
         this.context = context.getApplicationContext();
@@ -187,14 +191,18 @@ public final class GlucoseAlertSettings {
                 .putString(KEY_DISPLAY_UNITS, displayUnits)
                 .apply();
 
-        sendToWear();
+        sendToWearInternal(false);
     }
 
     public void retrySendToWear() {
-        sendToWear();
+        sendToWearInternal(false);
     }
 
     public void sendToWear() {
+        sendToWearInternal(false);
+    }
+
+    private void sendToWearInternal(boolean automaticRetry) {
         long now = System.currentTimeMillis();
         long previousRequestId = preferences.getLong(KEY_PENDING_REQUEST_ID, 0L);
         long requestId = Math.max(now, previousRequestId + 1L);
@@ -202,6 +210,7 @@ public final class GlucoseAlertSettings {
         preferences.edit()
                 .putLong(KEY_PENDING_REQUEST_ID, requestId)
                 .putLong(KEY_PENDING_SENT_AT_MS, now)
+                .remove(KEY_SEND_FAILED_REQUEST_ID)
                 .apply();
 
         PutDataMapRequest request = PutDataMapRequest.create(SETTINGS_PATH);
@@ -235,22 +244,25 @@ public final class GlucoseAlertSettings {
         PutDataRequest putDataRequest = request.asPutDataRequest().setUrgent();
         DataClient dataClient = Wearable.getDataClient(context);
         dataClient.putDataItem(putDataRequest)
-                .addOnSuccessListener(dataItem -> Log.i(
-                        TAG,
-                        "Alert settings queued for Wear requestId=" + requestId
-                                + ": low=" + isLowEnabled()
-                                + " threshold=" + getLowThresholdMgDl()
-                                + "mg/dL persistentVibration=" + isLowPersistentVibrationEnabled()
-                                + " repeat=" + isLowRepeatEnabled()
-                                + "/" + getLowRepeatIntervalMinutes() + "m"
-                                + " hysteresis=" + getLowHysteresisMgDl()
-                                + "mg/dL high=" + isHighEnabled()
-                                + " threshold=" + getHighThresholdMgDl()
-                                + "mg/dL persistentVibration=" + isHighPersistentVibrationEnabled()
-                                + " repeat=" + isHighRepeatEnabled()
-                                + "/" + getHighRepeatIntervalMinutes() + "m"
-                                + " hysteresis=" + getHighHysteresisMgDl() + "mg/dL"
-                ))
+                .addOnSuccessListener(dataItem -> {
+                    Log.i(
+                            TAG,
+                            "Alert settings queued for Wear requestId=" + requestId
+                                    + ": low=" + isLowEnabled()
+                                    + " threshold=" + getLowThresholdMgDl()
+                                    + "mg/dL persistentVibration=" + isLowPersistentVibrationEnabled()
+                                    + " repeat=" + isLowRepeatEnabled()
+                                    + "/" + getLowRepeatIntervalMinutes() + "m"
+                                    + " hysteresis=" + getLowHysteresisMgDl()
+                                    + "mg/dL high=" + isHighEnabled()
+                                    + " threshold=" + getHighThresholdMgDl()
+                                    + "mg/dL persistentVibration=" + isHighPersistentVibrationEnabled()
+                                    + " repeat=" + isHighRepeatEnabled()
+                                    + "/" + getHighRepeatIntervalMinutes() + "m"
+                                    + " hysteresis=" + getHighHysteresisMgDl() + "mg/dL"
+                    );
+                    scheduleConfirmationCheck(requestId, automaticRetry);
+                })
                 .addOnFailureListener(exception -> {
                     preferences.edit()
                             .putLong(KEY_SEND_FAILED_REQUEST_ID, requestId)
@@ -260,7 +272,37 @@ public final class GlucoseAlertSettings {
                             "Failed to queue alert settings for Wear requestId=" + requestId,
                             exception
                     );
+                    mainHandler.post(() -> Toast.makeText(
+                            context,
+                            "Could not send alert settings to watch. Phone settings were kept.",
+                            Toast.LENGTH_LONG
+                    ).show());
                 });
+    }
+
+    private void scheduleConfirmationCheck(long requestId, boolean automaticRetry) {
+        mainHandler.postDelayed(() -> {
+            long pendingRequestId = preferences.getLong(KEY_PENDING_REQUEST_ID, 0L);
+            if (pendingRequestId != requestId) return;
+            if (preferences.getLong(KEY_LAST_ACK_REQUEST_ID, 0L) == requestId) return;
+
+            if (!automaticRetry) {
+                Log.w(TAG, "Wear did not confirm alert settings requestId=" + requestId + "; retrying once");
+                Toast.makeText(
+                        context,
+                        "Watch not confirmed. Retrying alert settings...",
+                        Toast.LENGTH_LONG
+                ).show();
+                sendToWearInternal(true);
+            } else {
+                Log.w(TAG, "Wear did not confirm alert settings after retry requestId=" + requestId);
+                Toast.makeText(
+                        context,
+                        "Watch not confirmed. Phone settings were kept; the watch may still be using its previous settings.",
+                        Toast.LENGTH_LONG
+                ).show();
+            }
+        }, WATCH_ACK_TIMEOUT_MS);
     }
 
     public void recordWatchAcknowledgement(long requestId) {
