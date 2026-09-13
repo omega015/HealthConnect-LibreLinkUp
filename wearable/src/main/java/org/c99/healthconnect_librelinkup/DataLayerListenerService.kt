@@ -17,7 +17,6 @@
 package org.c99.healthconnect_librelinkup
 
 import android.content.ComponentName
-import android.util.Log
 import androidx.wear.tiles.TileService
 import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
 import com.google.android.gms.wearable.DataEventBuffer
@@ -41,15 +40,19 @@ class DataLayerListenerService : WearableListenerService() {
 
             if (uri.path == "/glucose") {
                 val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
+                val glucoseValue = dataMap.getFloat(GLUCOSE_KEY)
+                val glucoseUnits = dataMap.getInt(UNITS_KEY)
 
                 val glucose =
                     applicationContext.getSharedPreferences("glucose", MODE_PRIVATE).edit()
-                glucose.putFloat(GLUCOSE_KEY, dataMap.getFloat(GLUCOSE_KEY))
+                glucose.putFloat(GLUCOSE_KEY, glucoseValue)
                 glucose.putInt(TREND_ARROW_KEY, dataMap.getInt(TREND_ARROW_KEY))
                 glucose.putInt(COLOR_KEY, dataMap.getInt(COLOR_KEY))
-                glucose.putInt(UNITS_KEY, dataMap.getInt(UNITS_KEY))
+                glucose.putInt(UNITS_KEY, glucoseUnits)
                 glucose.putString(TIMESTAMP_KEY, dataMap.getString(TIMESTAMP_KEY))
                 glucose.commit()
+
+                GlucoseAlertManager.evaluate(applicationContext, glucoseValue, glucoseUnits)
 
                 ComplicationDataSourceUpdateRequester.create(
                     applicationContext,
