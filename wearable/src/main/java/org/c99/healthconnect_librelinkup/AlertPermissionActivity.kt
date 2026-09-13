@@ -1,0 +1,108 @@
+/*
+ * Copyright (c) 2024 Sam Steele
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.c99.healthconnect_librelinkup
+
+import android.Manifest
+import android.app.Activity
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import android.view.Gravity
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.TextView
+
+class AlertPermissionActivity : Activity() {
+    private lateinit var statusText: TextView
+    private lateinit var enableButton: Button
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        val padding = (20 * resources.displayMetrics.density).toInt()
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(padding, padding, padding, padding)
+        }
+
+        val title = TextView(this).apply {
+            text = getString(R.string.alert_permission_title)
+            textSize = 20f
+            gravity = Gravity.CENTER
+        }
+        val explanation = TextView(this).apply {
+            text = getString(R.string.alert_permission_explanation)
+            gravity = Gravity.CENTER
+            setPadding(0, padding / 2, 0, padding / 2)
+        }
+        statusText = TextView(this).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, padding / 2)
+        }
+        enableButton = Button(this).apply {
+            text = getString(R.string.alert_permission_enable)
+            setOnClickListener { requestAlertPermission() }
+        }
+
+        root.addView(title)
+        root.addView(explanation)
+        root.addView(statusText)
+        root.addView(enableButton)
+        setContentView(root)
+
+        refreshState()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshState()
+    }
+
+    private fun requestAlertPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+        } else {
+            refreshState()
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_NOTIFICATIONS) {
+            refreshState()
+        }
+    }
+
+    private fun refreshState() {
+        val granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+        statusText.text = getString(
+            if (granted) R.string.alert_permission_enabled else R.string.alert_permission_denied
+        )
+        enableButton.isEnabled = !granted
+    }
+
+    companion object {
+        private const val REQUEST_NOTIFICATIONS = 100
+    }
+}
