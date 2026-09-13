@@ -22,22 +22,30 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
+import android.view.MotionEvent
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 
 class AlertPermissionActivity : Activity() {
     private lateinit var statusText: TextView
     private lateinit var enableButton: Button
+    private lateinit var scrollView: ScrollView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val padding = (20 * resources.displayMetrics.density).toInt()
-        val root = LinearLayout(this).apply {
+        val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
+            gravity = Gravity.CENTER_HORIZONTAL
             setPadding(padding, padding, padding, padding)
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
         }
 
         val title = TextView(this).apply {
@@ -59,12 +67,33 @@ class AlertPermissionActivity : Activity() {
             setOnClickListener { requestAlertPermission() }
         }
 
-        root.addView(title)
-        root.addView(explanation)
-        root.addView(statusText)
-        root.addView(enableButton)
-        setContentView(root)
+        content.addView(title)
+        content.addView(explanation)
+        content.addView(statusText)
+        content.addView(enableButton)
 
+        scrollView = ScrollView(this).apply {
+            isFillViewport = true
+            isFocusable = true
+            isFocusableInTouchMode = true
+            addView(content)
+            setOnGenericMotionListener { _, event ->
+                if (event.action == MotionEvent.ACTION_SCROLL) {
+                    val delta = event.getAxisValue(MotionEvent.AXIS_SCROLL)
+                    if (delta != 0f) {
+                        smoothScrollBy(0, (-delta * 80 * resources.displayMetrics.density).toInt())
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            }
+        }
+
+        setContentView(scrollView)
+        scrollView.requestFocus()
         refreshState()
     }
 
