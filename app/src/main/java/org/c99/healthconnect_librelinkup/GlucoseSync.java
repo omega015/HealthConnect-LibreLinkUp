@@ -43,10 +43,16 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Collections;
 import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
+import kotlin.ResultKt;
 import kotlin.coroutines.Continuation;
 import kotlin.coroutines.CoroutineContext;
 import kotlin.coroutines.EmptyCoroutineContext;
+import kotlin.coroutines.intrinsics.IntrinsicsKt;
 
 /**
  * Performs one LibreLinkUp -> Health Connect -> Wear OS synchronization.
@@ -56,6 +62,7 @@ import kotlin.coroutines.EmptyCoroutineContext;
  */
 public final class GlucoseSync {
     private static final String TAG = "LibreLinkUpSync";
+    private static final long HEALTH_CONNECT_INSERT_TIMEOUT_SECONDS = 30;
 
     private static final String GLUCOSE_KEY = "org.c99.healthconnect_librelinkup.glucose";
     private static final String TREND_ARROW_KEY = "org.c99.healthconnect_librelinkup.trendArrow";
@@ -136,6 +143,7 @@ public final class GlucoseSync {
                 return SyncResult.success();
             }
 
+            Exception healthConnectFailure = null;
             if (healthConnectNeedsUpdate) {
                 ZonedDateTime time = parseMeasurementTime(factoryTimestamp);
                 HealthConnectClient healthConnectClient = HealthConnectClient.getOrCreate(applicationContext);
@@ -158,27 +166,26 @@ public final class GlucoseSync {
                         )
                 );
 
-                healthConnectClient.insertRecords(
-                        Collections.singletonList(record),
-                        new Continuation<InsertRecordsResponse>() {
-                            @NonNull
-                            @Override
-                            public CoroutineContext getContext() {
-                                return EmptyCoroutineContext.INSTANCE;
-                            }
+                try {
+                    insertHealthConnectRecord(healthConnectClient, record);
 
-                            @Override
-                            public void resumeWith(@NonNull Object result) {
-                                // Health Connect handles completion asynchronously. The existing app
-                                // does not need the response in order to continue the Wear transfer.
-                            }
-                        }
-                );
+                    if (hasFactoryTimestamp) {
+                        syncState.edit()
+                                .putString(KEY_LAST_HEALTH_CONNECT_TIMESTAMP, factoryTimestamp)
+                                .apply();
+                    }
 
-                if (hasFactoryTimestamp) {
-                    syncState.edit()
-                            .putString(KEY_LAST_HEALTH_CONNECT_TIMESTAMP, factoryTimestamp)
-                            .apply();
+                    Log.i(
+                            TAG,
+                            "Health Connect insert confirmed timestamp=" + factoryTimestamp
+                    );
+                } catch (Exception exception) {
+                    healthConnectFailure = exception;
+                    Log.e(
+                            TAG,
+                            "Health Connect insert failed; reading will be retried",
+                            exception
+                    );
                 }
             } else {
                 Log.i(
@@ -203,10 +210,70 @@ public final class GlucoseSync {
                 );
             }
 
+            if (healthConnectFailure != null) {
+                return SyncResult.failure(healthConnectFailure);
+            }
+
             return SyncResult.success();
         } catch (Exception exception) {
             Log.e(TAG, "Glucose sync failed", exception);
             return SyncResult.failure(exception);
+        }
+    }
+
+    private static void insertHealthConnectRecord(
+            HealthConnectClient healthConnectClient,
+            BloodGlucoseRecord record) throws Exception {
+        CountDownLatch completion = new CountDownLatch(1);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+
+        Continuation<InsertRecordsResponse> continuation = new Continuation<InsertRecordsResponse>() {
+            @NonNull
+            @Override
+            public CoroutineContext getContext() {
+                return EmptyCoroutineContext.INSTANCE;
+            }
+
+            @Override
+            public void resumeWith(@NonNull Object result) {
+                try {
+                    ResultKt.throwOnFailure(result);
+                } catch (Throwable throwable) {
+                    failure.set(throwable);
+                } finally {
+                    completion.countDown();
+                }
+            }
+        };
+
+        Object insertResult = healthConnectClient.insertRecords(
+                Collections.singletonList(record),
+                continuation
+        );
+
+        if (insertResult != IntrinsicsKt.getCOROUTINE_SUSPENDED()) {
+            ResultKt.throwOnFailure(insertResult);
+            return;
+        }
+
+        try {
+            if (!completion.await(HEALTH_CONNECT_INSERT_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                throw new TimeoutException(
+                        "Health Connect insert did not complete within "
+                                + HEALTH_CONNECT_INSERT_TIMEOUT_SECONDS + " seconds"
+                );
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw exception;
+        }
+
+        Throwable throwable = failure.get();
+        if (throwable != null) {
+            if (throwable instanceof Exception) {
+                throw (Exception) throwable;
+            }
+            throw new RuntimeException("Health Connect insert failed", throwable);
         }
     }
 
