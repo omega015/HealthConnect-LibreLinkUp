@@ -40,6 +40,8 @@ public final class GlucoseAlertSettings {
     public static final String KEY_HIGH_ENABLED = "high_enabled";
     public static final String KEY_LOW_THRESHOLD_MGDL = "low_threshold_mgdl";
     public static final String KEY_HIGH_THRESHOLD_MGDL = "high_threshold_mgdl";
+    public static final String KEY_LOW_PERSISTENT_VIBRATION = "low_persistent_vibration";
+    public static final String KEY_HIGH_PERSISTENT_VIBRATION = "high_persistent_vibration";
     public static final String KEY_LOW_REPEAT_ENABLED = "low_repeat_enabled";
     public static final String KEY_HIGH_REPEAT_ENABLED = "high_repeat_enabled";
     public static final String KEY_LOW_REPEAT_INTERVAL_MINUTES = "low_repeat_interval_minutes";
@@ -79,6 +81,14 @@ public final class GlucoseAlertSettings {
 
     public float getHighThresholdMgDl() {
         return preferences.getFloat(KEY_HIGH_THRESHOLD_MGDL, DEFAULT_HIGH_THRESHOLD_MGDL);
+    }
+
+    public boolean isLowPersistentVibrationEnabled() {
+        return preferences.getBoolean(KEY_LOW_PERSISTENT_VIBRATION, false);
+    }
+
+    public boolean isHighPersistentVibrationEnabled() {
+        return preferences.getBoolean(KEY_HIGH_PERSISTENT_VIBRATION, false);
     }
 
     public boolean isLowRepeatEnabled() {
@@ -128,11 +138,13 @@ public final class GlucoseAlertSettings {
     public void saveAndSend(
             boolean lowEnabled,
             float lowThresholdMgDl,
+            boolean lowPersistentVibration,
             boolean lowRepeatEnabled,
             int lowRepeatIntervalMinutes,
             float lowHysteresisMgDl,
             boolean highEnabled,
             float highThresholdMgDl,
+            boolean highPersistentVibration,
             boolean highRepeatEnabled,
             int highRepeatIntervalMinutes,
             float highHysteresisMgDl,
@@ -142,6 +154,8 @@ public final class GlucoseAlertSettings {
                 .putBoolean(KEY_HIGH_ENABLED, highEnabled)
                 .putFloat(KEY_LOW_THRESHOLD_MGDL, lowThresholdMgDl)
                 .putFloat(KEY_HIGH_THRESHOLD_MGDL, highThresholdMgDl)
+                .putBoolean(KEY_LOW_PERSISTENT_VIBRATION, lowPersistentVibration)
+                .putBoolean(KEY_HIGH_PERSISTENT_VIBRATION, highPersistentVibration)
                 .putBoolean(KEY_LOW_REPEAT_ENABLED, lowRepeatEnabled)
                 .putBoolean(KEY_HIGH_REPEAT_ENABLED, highRepeatEnabled)
                 .putInt(
@@ -166,6 +180,14 @@ public final class GlucoseAlertSettings {
         request.getDataMap().putBoolean(KEY_HIGH_ENABLED, isHighEnabled());
         request.getDataMap().putFloat(KEY_LOW_THRESHOLD_MGDL, getLowThresholdMgDl());
         request.getDataMap().putFloat(KEY_HIGH_THRESHOLD_MGDL, getHighThresholdMgDl());
+        request.getDataMap().putBoolean(
+                KEY_LOW_PERSISTENT_VIBRATION,
+                isLowPersistentVibrationEnabled()
+        );
+        request.getDataMap().putBoolean(
+                KEY_HIGH_PERSISTENT_VIBRATION,
+                isHighPersistentVibrationEnabled()
+        );
         request.getDataMap().putBoolean(KEY_LOW_REPEAT_ENABLED, isLowRepeatEnabled());
         request.getDataMap().putBoolean(KEY_HIGH_REPEAT_ENABLED, isHighRepeatEnabled());
         request.getDataMap().putInt(
@@ -187,12 +209,14 @@ public final class GlucoseAlertSettings {
                         TAG,
                         "Alert settings queued for Wear: low=" + isLowEnabled()
                                 + " threshold=" + getLowThresholdMgDl()
-                                + "mg/dL repeat=" + isLowRepeatEnabled()
+                                + "mg/dL persistentVibration=" + isLowPersistentVibrationEnabled()
+                                + " repeat=" + isLowRepeatEnabled()
                                 + "/" + getLowRepeatIntervalMinutes() + "m"
                                 + " hysteresis=" + getLowHysteresisMgDl()
                                 + "mg/dL high=" + isHighEnabled()
                                 + " threshold=" + getHighThresholdMgDl()
-                                + "mg/dL repeat=" + isHighRepeatEnabled()
+                                + "mg/dL persistentVibration=" + isHighPersistentVibrationEnabled()
+                                + " repeat=" + isHighRepeatEnabled()
                                 + "/" + getHighRepeatIntervalMinutes() + "m"
                                 + " hysteresis=" + getHighHysteresisMgDl() + "mg/dL"
                 ))
