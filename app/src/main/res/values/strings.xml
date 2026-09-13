@@ -25,6 +25,7 @@
     <string name="status_login">Enter your email address and password above to login to LibreLinkUp</string>
     <string name="battery_restricted">⚠️ This app is currently being restricted from running in the background</string>
     <string name="disable_battery_restrictions">Disable Battery Optimizations</string>
+    <string name="sync_section_title">Glucose sync</string>
     <string name="sync_mode_label">Glucose sync mode</string>
     <string name="sync_mode_standard">Standard</string>
     <string name="sync_mode_fast">Fast</string>
