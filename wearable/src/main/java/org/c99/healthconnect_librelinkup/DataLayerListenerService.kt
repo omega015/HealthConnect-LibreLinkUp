@@ -23,6 +23,8 @@ import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUp
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMap
 import com.google.android.gms.wearable.DataMapItem
+import com.google.android.gms.wearable.PutDataMapRequest
+import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
 import org.c99.healthconnect_librelinkup.complication.GlucoseComplicationService
 import org.c99.healthconnect_librelinkup.tile.GlucoseTileService
@@ -36,6 +38,9 @@ class DataLayerListenerService : WearableListenerService() {
         const val UNITS_KEY = "org.c99.healthconnect_librelinkup.units"
         const val TIMESTAMP_KEY = "org.c99.healthconnect_librelinkup.timestamp"
         private const val ALERT_SETTINGS_PATH = "/alert-settings"
+        private const val ALERT_SETTINGS_ACK_PATH = "/alert-settings-ack"
+        private const val KEY_REQUEST_ID = "request_id"
+        private const val KEY_ACK_AT = "ack_at"
         private const val KEY_ALERT_STATE = "alert_state"
         private const val KEY_LAST_LOW_ALERT_TIME_MS = "last_low_alert_time_ms"
         private const val KEY_LAST_HIGH_ALERT_TIME_MS = "last_high_alert_time_ms"
@@ -193,6 +198,28 @@ class DataLayerListenerService : WearableListenerService() {
                 " repeat=$highRepeatEnabled/${highRepeatInterval}m hysteresis=${highHysteresis}mg/dL" +
                 if (resetActiveState) " active alert state reset" else " active alert state preserved"
         )
+
+        if (dataMap.containsKey(KEY_REQUEST_ID)) {
+            sendSettingsAcknowledgement(dataMap.getLong(KEY_REQUEST_ID))
+        }
+    }
+
+    private fun sendSettingsAcknowledgement(requestId: Long) {
+        if (requestId <= 0L) return
+
+        val request = PutDataMapRequest.create(ALERT_SETTINGS_ACK_PATH).apply {
+            dataMap.putLong(KEY_REQUEST_ID, requestId)
+            dataMap.putLong(KEY_ACK_AT, System.currentTimeMillis())
+        }
+
+        Wearable.getDataClient(applicationContext)
+            .putDataItem(request.asPutDataRequest().setUrgent())
+            .addOnSuccessListener {
+                Log.i(TAG, "Wear alert settings acknowledgement queued requestId=$requestId")
+            }
+            .addOnFailureListener { error ->
+                Log.e(TAG, "Failed to queue Wear alert settings acknowledgement requestId=$requestId", error)
+            }
     }
 
     private fun booleanValue(dataMap: DataMap, key: String, fallback: Boolean): Boolean =
