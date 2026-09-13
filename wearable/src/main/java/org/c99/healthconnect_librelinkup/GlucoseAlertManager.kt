@@ -27,10 +27,8 @@ import android.util.Log
 
 /**
  * Evaluates each new glucose reading on the watch and raises local alerts.
- *
- * Alert settings are deliberately disabled by default. A later settings-sync step will populate
- * these preferences from the companion phone app. Keeping the alert state on the watch means a
- * reading is evaluated as soon as the Wear Data Layer delivers it.
+ * Alert state and timing live on the watch so repeats and re-arm behaviour continue to work
+ * independently once settings have been received from the phone.
  */
 object GlucoseAlertManager {
     private const val TAG = "LibreLinkUpAlert"
@@ -40,8 +38,16 @@ object GlucoseAlertManager {
     const val KEY_HIGH_ENABLED = "high_enabled"
     const val KEY_LOW_THRESHOLD_MGDL = "low_threshold_mgdl"
     const val KEY_HIGH_THRESHOLD_MGDL = "high_threshold_mgdl"
+    const val KEY_LOW_REPEAT_ENABLED = "low_repeat_enabled"
+    const val KEY_HIGH_REPEAT_ENABLED = "high_repeat_enabled"
+    const val KEY_LOW_REPEAT_INTERVAL_MINUTES = "low_repeat_interval_minutes"
+    const val KEY_HIGH_REPEAT_INTERVAL_MINUTES = "high_repeat_interval_minutes"
+    const val KEY_LOW_HYSTERESIS_MGDL = "low_hysteresis_mgdl"
+    const val KEY_HIGH_HYSTERESIS_MGDL = "high_hysteresis_mgdl"
 
     private const val KEY_ALERT_STATE = "alert_state"
+    private const val KEY_LAST_LOW_ALERT_TIME_MS = "last_low_alert_time_ms"
+    private const val KEY_LAST_HIGH_ALERT_TIME_MS = "last_high_alert_time_ms"
 
     private const val STATE_NORMAL = "normal"
     private const val STATE_LOW = "low"
@@ -49,10 +55,8 @@ object GlucoseAlertManager {
 
     private const val DEFAULT_LOW_THRESHOLD_MGDL = 70f
     private const val DEFAULT_HIGH_THRESHOLD_MGDL = 180f
-
-    // Require a small move back inside the target range before re-arming an alert. This avoids
-    // repeated alarms when readings hover around the configured boundary.
-    private const val HYSTERESIS_MGDL = 5f
+    private const val DEFAULT_HYSTERESIS_MGDL = 5f
+    private const val DEFAULT_REPEAT_INTERVAL_MINUTES = 15
 
     private const val LOW_CHANNEL_ID = "low_glucose_alerts"
     private const val HIGH_CHANNEL_ID = "high_glucose_alerts"
@@ -64,30 +68,54 @@ object GlucoseAlertManager {
         val lowEnabled = prefs.getBoolean(KEY_LOW_ENABLED, false)
         val highEnabled = prefs.getBoolean(KEY_HIGH_ENABLED, false)
 
-        if (!lowEnabled && !highEnabled) {
-            return
-        }
+        if (!lowEnabled && !highEnabled) return
 
         val glucoseMgDl = if (glucoseUnits == 1) glucoseValue else glucoseValue * 18f
         val lowThreshold = prefs.getFloat(KEY_LOW_THRESHOLD_MGDL, DEFAULT_LOW_THRESHOLD_MGDL)
         val highThreshold = prefs.getFloat(KEY_HIGH_THRESHOLD_MGDL, DEFAULT_HIGH_THRESHOLD_MGDL)
+        val lowHysteresis = prefs.getFloat(KEY_LOW_HYSTERESIS_MGDL, DEFAULT_HYSTERESIS_MGDL)
+            .coerceAtLeast(0f)
+        val highHysteresis = prefs.getFloat(KEY_HIGH_HYSTERESIS_MGDL, DEFAULT_HYSTERESIS_MGDL)
+            .coerceAtLeast(0f)
         val previousState = prefs.getString(KEY_ALERT_STATE, STATE_NORMAL) ?: STATE_NORMAL
 
         val nextState = when {
             lowEnabled && glucoseMgDl <= lowThreshold -> STATE_LOW
             highEnabled && glucoseMgDl >= highThreshold -> STATE_HIGH
-            previousState == STATE_LOW && glucoseMgDl < lowThreshold + HYSTERESIS_MGDL -> STATE_LOW
-            previousState == STATE_HIGH && glucoseMgDl > highThreshold - HYSTERESIS_MGDL -> STATE_HIGH
+            previousState == STATE_LOW && lowEnabled && glucoseMgDl < lowThreshold + lowHysteresis -> STATE_LOW
+            previousState == STATE_HIGH && highEnabled && glucoseMgDl > highThreshold - highHysteresis -> STATE_HIGH
             else -> STATE_NORMAL
         }
 
+        val editor = prefs.edit()
         if (nextState != previousState) {
-            prefs.edit().putString(KEY_ALERT_STATE, nextState).apply()
+            editor.putString(KEY_ALERT_STATE, nextState)
+            if (nextState == STATE_LOW) editor.remove(KEY_LAST_LOW_ALERT_TIME_MS)
+            if (nextState == STATE_HIGH) editor.remove(KEY_LAST_HIGH_ALERT_TIME_MS)
+            if (nextState == STATE_NORMAL) {
+                editor.remove(KEY_LAST_LOW_ALERT_TIME_MS)
+                editor.remove(KEY_LAST_HIGH_ALERT_TIME_MS)
+            }
+            editor.apply()
+        }
 
-            when (nextState) {
-                STATE_LOW -> showAlert(context, true, glucoseValue, glucoseUnits)
-                STATE_HIGH -> showAlert(context, false, glucoseValue, glucoseUnits)
-                STATE_NORMAL -> {
+        when (nextState) {
+            STATE_LOW -> maybeAlert(
+                context,
+                low = true,
+                glucoseValue = glucoseValue,
+                glucoseUnits = glucoseUnits,
+                enteredState = previousState != STATE_LOW
+            )
+            STATE_HIGH -> maybeAlert(
+                context,
+                low = false,
+                glucoseValue = glucoseValue,
+                glucoseUnits = glucoseUnits,
+                enteredState = previousState != STATE_HIGH
+            )
+            STATE_NORMAL -> {
+                if (previousState != STATE_NORMAL) {
                     val notificationManager = context.getSystemService(NotificationManager::class.java)
                     notificationManager.cancel(LOW_NOTIFICATION_ID)
                     notificationManager.cancel(HIGH_NOTIFICATION_ID)
@@ -97,15 +125,55 @@ object GlucoseAlertManager {
         }
     }
 
-    private fun showAlert(context: Context, low: Boolean, glucoseValue: Float, glucoseUnits: Int) {
+    private fun maybeAlert(
+        context: Context,
+        low: Boolean,
+        glucoseValue: Float,
+        glucoseUnits: Int,
+        enteredState: Boolean
+    ) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val repeatEnabled = prefs.getBoolean(
+            if (low) KEY_LOW_REPEAT_ENABLED else KEY_HIGH_REPEAT_ENABLED,
+            false
+        )
+        val repeatMinutes = sanitizeRepeatInterval(
+            prefs.getInt(
+                if (low) KEY_LOW_REPEAT_INTERVAL_MINUTES else KEY_HIGH_REPEAT_INTERVAL_MINUTES,
+                DEFAULT_REPEAT_INTERVAL_MINUTES
+            )
+        )
+        val lastAlertKey = if (low) KEY_LAST_LOW_ALERT_TIME_MS else KEY_LAST_HIGH_ALERT_TIME_MS
+        val lastAlertTime = prefs.getLong(lastAlertKey, 0L)
+        val now = System.currentTimeMillis()
+        val repeatDue = repeatEnabled && lastAlertTime > 0L &&
+            now - lastAlertTime >= repeatMinutes * 60_000L
+        val shouldAlert = enteredState || lastAlertTime == 0L || repeatDue
+
+        if (!shouldAlert) return
+
+        if (showAlert(context, low, glucoseValue, glucoseUnits)) {
+            prefs.edit().putLong(lastAlertKey, now).apply()
+            if (repeatDue) {
+                Log.i(TAG, (if (low) "Low" else "High") + " glucose repeat alert posted")
+            }
+        }
+    }
+
+    private fun showAlert(
+        context: Context,
+        low: Boolean,
+        glucoseValue: Float,
+        glucoseUnits: Int
+    ): Boolean {
         createNotificationChannels(context)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-            && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
         ) {
             Log.w(TAG, "Glucose alert suppressed because watch notification permission is not granted")
-            return
+            return false
         }
 
         val channelId = if (low) LOW_CHANNEL_ID else HIGH_CHANNEL_ID
@@ -133,12 +201,16 @@ object GlucoseAlertManager {
             .notify(notificationId, notification)
 
         Log.i(TAG, (if (low) "Low" else "High") + " glucose alert posted: " + formattedValue)
+        return true
+    }
+
+    private fun sanitizeRepeatInterval(minutes: Int): Int = when (minutes) {
+        5, 10, 15, 30, 60 -> minutes
+        else -> DEFAULT_REPEAT_INTERVAL_MINUTES
     }
 
     private fun createNotificationChannels(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return
-        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
         val notificationManager = context.getSystemService(NotificationManager::class.java)
 
