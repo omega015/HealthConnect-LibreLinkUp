@@ -16,7 +16,8 @@
 
 <resources>
     <string name="app_name">LibreLinkUp for HealthConnect</string>
-    <string name="title_activity_main">Login to LibreLinkUp</string>
+    <string name="title_activity_main">LibreLinkUp for HealthConnect</string>
+    <string name="login_section_title">LibreLinkUp account</string>
     <string name="prompt_email">Email</string>
     <string name="prompt_password">Password</string>
     <string name="prompt_url">Server</string>
