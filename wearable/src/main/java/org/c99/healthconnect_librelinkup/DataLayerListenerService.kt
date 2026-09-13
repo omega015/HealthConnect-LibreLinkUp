@@ -17,6 +17,7 @@
 package org.c99.healthconnect_librelinkup
 
 import android.content.ComponentName
+import android.util.Log
 import androidx.wear.tiles.TileService
 import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
 import com.google.android.gms.wearable.DataEventBuffer
@@ -27,38 +28,81 @@ import org.c99.healthconnect_librelinkup.tile.GlucoseTileService
 
 class DataLayerListenerService : WearableListenerService() {
     companion object {
+        private const val TAG = "LibreLinkUpAlert"
         const val GLUCOSE_KEY: String = "org.c99.healthconnect_librelinkup.glucose"
         const val TREND_ARROW_KEY: String = "org.c99.healthconnect_librelinkup.trendArrow"
         const val COLOR_KEY: String = "org.c99.healthconnect_librelinkup.color"
         const val UNITS_KEY = "org.c99.healthconnect_librelinkup.units"
         const val TIMESTAMP_KEY = "org.c99.healthconnect_librelinkup.timestamp"
+        private const val ALERT_SETTINGS_PATH = "/alert-settings"
     }
 
     override fun onDataChanged(dataEvents: DataEventBuffer) {
         for (event in dataEvents) {
             val uri = event.dataItem.uri
+            val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
 
-            if (uri.path == "/glucose") {
-                val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
-                val glucoseValue = dataMap.getFloat(GLUCOSE_KEY)
-                val glucoseUnits = dataMap.getInt(UNITS_KEY)
+            when (uri.path) {
+                "/glucose" -> {
+                    val glucoseValue = dataMap.getFloat(GLUCOSE_KEY)
+                    val glucoseUnits = dataMap.getInt(UNITS_KEY)
 
-                val glucose =
-                    applicationContext.getSharedPreferences("glucose", MODE_PRIVATE).edit()
-                glucose.putFloat(GLUCOSE_KEY, glucoseValue)
-                glucose.putInt(TREND_ARROW_KEY, dataMap.getInt(TREND_ARROW_KEY))
-                glucose.putInt(COLOR_KEY, dataMap.getInt(COLOR_KEY))
-                glucose.putInt(UNITS_KEY, glucoseUnits)
-                glucose.putString(TIMESTAMP_KEY, dataMap.getString(TIMESTAMP_KEY))
-                glucose.commit()
+                    val glucose =
+                        applicationContext.getSharedPreferences("glucose", MODE_PRIVATE).edit()
+                    glucose.putFloat(GLUCOSE_KEY, glucoseValue)
+                    glucose.putInt(TREND_ARROW_KEY, dataMap.getInt(TREND_ARROW_KEY))
+                    glucose.putInt(COLOR_KEY, dataMap.getInt(COLOR_KEY))
+                    glucose.putInt(UNITS_KEY, glucoseUnits)
+                    glucose.putString(TIMESTAMP_KEY, dataMap.getString(TIMESTAMP_KEY))
+                    glucose.commit()
 
-                GlucoseAlertManager.evaluate(applicationContext, glucoseValue, glucoseUnits)
+                    GlucoseAlertManager.evaluate(applicationContext, glucoseValue, glucoseUnits)
 
-                ComplicationDataSourceUpdateRequester.create(
-                    applicationContext,
-                    ComponentName(applicationContext, GlucoseComplicationService::class.java)
-                ).requestUpdateAll()
-                TileService.getUpdater(applicationContext).requestUpdate(GlucoseTileService::class.java)
+                    ComplicationDataSourceUpdateRequester.create(
+                        applicationContext,
+                        ComponentName(applicationContext, GlucoseComplicationService::class.java)
+                    ).requestUpdateAll()
+                    TileService.getUpdater(applicationContext).requestUpdate(GlucoseTileService::class.java)
+                }
+
+                ALERT_SETTINGS_PATH -> {
+                    val alertPrefs = applicationContext.getSharedPreferences(
+                        GlucoseAlertManager.PREFS_NAME,
+                        MODE_PRIVATE
+                    )
+                    alertPrefs.edit()
+                        .putBoolean(
+                            GlucoseAlertManager.KEY_LOW_ENABLED,
+                            dataMap.getBoolean(GlucoseAlertManager.KEY_LOW_ENABLED)
+                        )
+                        .putBoolean(
+                            GlucoseAlertManager.KEY_HIGH_ENABLED,
+                            dataMap.getBoolean(GlucoseAlertManager.KEY_HIGH_ENABLED)
+                        )
+                        .putFloat(
+                            GlucoseAlertManager.KEY_LOW_THRESHOLD_MGDL,
+                            dataMap.getFloat(GlucoseAlertManager.KEY_LOW_THRESHOLD_MGDL)
+                        )
+                        .putFloat(
+                            GlucoseAlertManager.KEY_HIGH_THRESHOLD_MGDL,
+                            dataMap.getFloat(GlucoseAlertManager.KEY_HIGH_THRESHOLD_MGDL)
+                        )
+                        .remove("alert_state")
+                        .apply()
+
+                    Log.i(
+                        TAG,
+                        "Wear alert settings updated: low=" +
+                            dataMap.getBoolean(GlucoseAlertManager.KEY_LOW_ENABLED) +
+                            " threshold=" +
+                            dataMap.getFloat(GlucoseAlertManager.KEY_LOW_THRESHOLD_MGDL) +
+                            "mg/dL high=" +
+                            dataMap.getBoolean(GlucoseAlertManager.KEY_HIGH_ENABLED) +
+                            " threshold=" +
+                            dataMap.getFloat(GlucoseAlertManager.KEY_HIGH_THRESHOLD_MGDL) +
+                            "mg/dL"
+                    )
+                }
             }
         }
     }
