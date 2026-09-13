@@ -21,6 +21,7 @@ import android.util.Log
 import androidx.wear.tiles.TileService
 import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
 import com.google.android.gms.wearable.DataEventBuffer
+import com.google.android.gms.wearable.DataMap
 import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.WearableListenerService
 import org.c99.healthconnect_librelinkup.complication.GlucoseComplicationService
@@ -35,6 +36,11 @@ class DataLayerListenerService : WearableListenerService() {
         const val UNITS_KEY = "org.c99.healthconnect_librelinkup.units"
         const val TIMESTAMP_KEY = "org.c99.healthconnect_librelinkup.timestamp"
         private const val ALERT_SETTINGS_PATH = "/alert-settings"
+        private const val KEY_ALERT_STATE = "alert_state"
+        private const val KEY_LAST_LOW_ALERT_TIME_MS = "last_low_alert_time_ms"
+        private const val KEY_LAST_HIGH_ALERT_TIME_MS = "last_high_alert_time_ms"
+        private const val STATE_LOW = "low"
+        private const val STATE_HIGH = "high"
     }
 
     override fun onDataChanged(dataEvents: DataEventBuffer) {
@@ -65,81 +71,136 @@ class DataLayerListenerService : WearableListenerService() {
                     TileService.getUpdater(applicationContext).requestUpdate(GlucoseTileService::class.java)
                 }
 
-                ALERT_SETTINGS_PATH -> {
-                    val alertPrefs = applicationContext.getSharedPreferences(
-                        GlucoseAlertManager.PREFS_NAME,
-                        MODE_PRIVATE
-                    )
-                    alertPrefs.edit()
-                        .putBoolean(
-                            GlucoseAlertManager.KEY_LOW_ENABLED,
-                            dataMap.getBoolean(GlucoseAlertManager.KEY_LOW_ENABLED)
-                        )
-                        .putBoolean(
-                            GlucoseAlertManager.KEY_HIGH_ENABLED,
-                            dataMap.getBoolean(GlucoseAlertManager.KEY_HIGH_ENABLED)
-                        )
-                        .putFloat(
-                            GlucoseAlertManager.KEY_LOW_THRESHOLD_MGDL,
-                            dataMap.getFloat(GlucoseAlertManager.KEY_LOW_THRESHOLD_MGDL)
-                        )
-                        .putFloat(
-                            GlucoseAlertManager.KEY_HIGH_THRESHOLD_MGDL,
-                            dataMap.getFloat(GlucoseAlertManager.KEY_HIGH_THRESHOLD_MGDL)
-                        )
-                        .putBoolean(
-                            GlucoseAlertManager.KEY_LOW_REPEAT_ENABLED,
-                            dataMap.getBoolean(GlucoseAlertManager.KEY_LOW_REPEAT_ENABLED)
-                        )
-                        .putBoolean(
-                            GlucoseAlertManager.KEY_HIGH_REPEAT_ENABLED,
-                            dataMap.getBoolean(GlucoseAlertManager.KEY_HIGH_REPEAT_ENABLED)
-                        )
-                        .putInt(
-                            GlucoseAlertManager.KEY_LOW_REPEAT_INTERVAL_MINUTES,
-                            dataMap.getInt(GlucoseAlertManager.KEY_LOW_REPEAT_INTERVAL_MINUTES)
-                        )
-                        .putInt(
-                            GlucoseAlertManager.KEY_HIGH_REPEAT_INTERVAL_MINUTES,
-                            dataMap.getInt(GlucoseAlertManager.KEY_HIGH_REPEAT_INTERVAL_MINUTES)
-                        )
-                        .putFloat(
-                            GlucoseAlertManager.KEY_LOW_HYSTERESIS_MGDL,
-                            dataMap.getFloat(GlucoseAlertManager.KEY_LOW_HYSTERESIS_MGDL)
-                        )
-                        .putFloat(
-                            GlucoseAlertManager.KEY_HIGH_HYSTERESIS_MGDL,
-                            dataMap.getFloat(GlucoseAlertManager.KEY_HIGH_HYSTERESIS_MGDL)
-                        )
-                        .remove("alert_state")
-                        .remove("last_low_alert_time_ms")
-                        .remove("last_high_alert_time_ms")
-                        .apply()
-
-                    Log.i(
-                        TAG,
-                        "Wear alert settings updated: low=" +
-                            dataMap.getBoolean(GlucoseAlertManager.KEY_LOW_ENABLED) +
-                            " threshold=" +
-                            dataMap.getFloat(GlucoseAlertManager.KEY_LOW_THRESHOLD_MGDL) +
-                            "mg/dL repeat=" +
-                            dataMap.getBoolean(GlucoseAlertManager.KEY_LOW_REPEAT_ENABLED) +
-                            "/" + dataMap.getInt(GlucoseAlertManager.KEY_LOW_REPEAT_INTERVAL_MINUTES) +
-                            "m hysteresis=" +
-                            dataMap.getFloat(GlucoseAlertManager.KEY_LOW_HYSTERESIS_MGDL) +
-                            "mg/dL high=" +
-                            dataMap.getBoolean(GlucoseAlertManager.KEY_HIGH_ENABLED) +
-                            " threshold=" +
-                            dataMap.getFloat(GlucoseAlertManager.KEY_HIGH_THRESHOLD_MGDL) +
-                            "mg/dL repeat=" +
-                            dataMap.getBoolean(GlucoseAlertManager.KEY_HIGH_REPEAT_ENABLED) +
-                            "/" + dataMap.getInt(GlucoseAlertManager.KEY_HIGH_REPEAT_INTERVAL_MINUTES) +
-                            "m hysteresis=" +
-                            dataMap.getFloat(GlucoseAlertManager.KEY_HIGH_HYSTERESIS_MGDL) +
-                            "mg/dL"
-                    )
-                }
+                ALERT_SETTINGS_PATH -> updateAlertSettings(dataMap)
             }
         }
     }
+
+    private fun updateAlertSettings(dataMap: DataMap) {
+        val alertPrefs = applicationContext.getSharedPreferences(
+            GlucoseAlertManager.PREFS_NAME,
+            MODE_PRIVATE
+        )
+
+        val oldLowEnabled = alertPrefs.getBoolean(GlucoseAlertManager.KEY_LOW_ENABLED, false)
+        val oldHighEnabled = alertPrefs.getBoolean(GlucoseAlertManager.KEY_HIGH_ENABLED, false)
+        val oldLowThreshold = alertPrefs.getFloat(GlucoseAlertManager.KEY_LOW_THRESHOLD_MGDL, 70f)
+        val oldHighThreshold = alertPrefs.getFloat(GlucoseAlertManager.KEY_HIGH_THRESHOLD_MGDL, 180f)
+        val oldLowHysteresis = alertPrefs.getFloat(GlucoseAlertManager.KEY_LOW_HYSTERESIS_MGDL, 5f)
+        val oldHighHysteresis = alertPrefs.getFloat(GlucoseAlertManager.KEY_HIGH_HYSTERESIS_MGDL, 5f)
+        val previousState = alertPrefs.getString(KEY_ALERT_STATE, null)
+
+        val lowEnabled = booleanValue(dataMap, GlucoseAlertManager.KEY_LOW_ENABLED, oldLowEnabled)
+        val highEnabled = booleanValue(dataMap, GlucoseAlertManager.KEY_HIGH_ENABLED, oldHighEnabled)
+        val lowThreshold = floatValue(
+            dataMap,
+            GlucoseAlertManager.KEY_LOW_THRESHOLD_MGDL,
+            oldLowThreshold
+        )
+        val highThreshold = floatValue(
+            dataMap,
+            GlucoseAlertManager.KEY_HIGH_THRESHOLD_MGDL,
+            oldHighThreshold
+        )
+        val lowPersistentVibration = booleanValue(
+            dataMap,
+            GlucoseAlertManager.KEY_LOW_PERSISTENT_VIBRATION,
+            alertPrefs.getBoolean(GlucoseAlertManager.KEY_LOW_PERSISTENT_VIBRATION, false)
+        )
+        val highPersistentVibration = booleanValue(
+            dataMap,
+            GlucoseAlertManager.KEY_HIGH_PERSISTENT_VIBRATION,
+            alertPrefs.getBoolean(GlucoseAlertManager.KEY_HIGH_PERSISTENT_VIBRATION, false)
+        )
+        val lowRepeatEnabled = booleanValue(
+            dataMap,
+            GlucoseAlertManager.KEY_LOW_REPEAT_ENABLED,
+            alertPrefs.getBoolean(GlucoseAlertManager.KEY_LOW_REPEAT_ENABLED, false)
+        )
+        val highRepeatEnabled = booleanValue(
+            dataMap,
+            GlucoseAlertManager.KEY_HIGH_REPEAT_ENABLED,
+            alertPrefs.getBoolean(GlucoseAlertManager.KEY_HIGH_REPEAT_ENABLED, false)
+        )
+        val lowRepeatInterval = intValue(
+            dataMap,
+            GlucoseAlertManager.KEY_LOW_REPEAT_INTERVAL_MINUTES,
+            alertPrefs.getInt(GlucoseAlertManager.KEY_LOW_REPEAT_INTERVAL_MINUTES, 15)
+        )
+        val highRepeatInterval = intValue(
+            dataMap,
+            GlucoseAlertManager.KEY_HIGH_REPEAT_INTERVAL_MINUTES,
+            alertPrefs.getInt(GlucoseAlertManager.KEY_HIGH_REPEAT_INTERVAL_MINUTES, 15)
+        )
+        val lowHysteresis = floatValue(
+            dataMap,
+            GlucoseAlertManager.KEY_LOW_HYSTERESIS_MGDL,
+            oldLowHysteresis
+        )
+        val highHysteresis = floatValue(
+            dataMap,
+            GlucoseAlertManager.KEY_HIGH_HYSTERESIS_MGDL,
+            oldHighHysteresis
+        )
+
+        val lowDefinitionChanged = oldLowEnabled != lowEnabled ||
+            oldLowThreshold != lowThreshold || oldLowHysteresis != lowHysteresis
+        val highDefinitionChanged = oldHighEnabled != highEnabled ||
+            oldHighThreshold != highThreshold || oldHighHysteresis != highHysteresis
+        val resetActiveState = (previousState == STATE_LOW && lowDefinitionChanged) ||
+            (previousState == STATE_HIGH && highDefinitionChanged)
+
+        val editor = alertPrefs.edit()
+            .putBoolean(GlucoseAlertManager.KEY_LOW_ENABLED, lowEnabled)
+            .putBoolean(GlucoseAlertManager.KEY_HIGH_ENABLED, highEnabled)
+            .putFloat(GlucoseAlertManager.KEY_LOW_THRESHOLD_MGDL, lowThreshold)
+            .putFloat(GlucoseAlertManager.KEY_HIGH_THRESHOLD_MGDL, highThreshold)
+            .putBoolean(
+                GlucoseAlertManager.KEY_LOW_PERSISTENT_VIBRATION,
+                lowPersistentVibration
+            )
+            .putBoolean(
+                GlucoseAlertManager.KEY_HIGH_PERSISTENT_VIBRATION,
+                highPersistentVibration
+            )
+            .putBoolean(GlucoseAlertManager.KEY_LOW_REPEAT_ENABLED, lowRepeatEnabled)
+            .putBoolean(GlucoseAlertManager.KEY_HIGH_REPEAT_ENABLED, highRepeatEnabled)
+            .putInt(GlucoseAlertManager.KEY_LOW_REPEAT_INTERVAL_MINUTES, lowRepeatInterval)
+            .putInt(GlucoseAlertManager.KEY_HIGH_REPEAT_INTERVAL_MINUTES, highRepeatInterval)
+            .putFloat(GlucoseAlertManager.KEY_LOW_HYSTERESIS_MGDL, lowHysteresis)
+            .putFloat(GlucoseAlertManager.KEY_HIGH_HYSTERESIS_MGDL, highHysteresis)
+
+        if (resetActiveState) {
+            editor.remove(KEY_ALERT_STATE)
+            if (previousState == STATE_LOW) editor.remove(KEY_LAST_LOW_ALERT_TIME_MS)
+            if (previousState == STATE_HIGH) editor.remove(KEY_LAST_HIGH_ALERT_TIME_MS)
+        }
+        editor.apply()
+
+        if (previousState == STATE_LOW && !lowEnabled) {
+            GlucoseAlertManager.acknowledge(applicationContext, low = true)
+        }
+        if (previousState == STATE_HIGH && !highEnabled) {
+            GlucoseAlertManager.acknowledge(applicationContext, low = false)
+        }
+
+        Log.i(
+            TAG,
+            "Wear alert settings updated: low=$lowEnabled threshold=${lowThreshold}mg/dL" +
+                " persistentVibration=$lowPersistentVibration repeat=$lowRepeatEnabled/${lowRepeatInterval}m" +
+                " hysteresis=${lowHysteresis}mg/dL high=$highEnabled" +
+                " threshold=${highThreshold}mg/dL persistentVibration=$highPersistentVibration" +
+                " repeat=$highRepeatEnabled/${highRepeatInterval}m hysteresis=${highHysteresis}mg/dL" +
+                if (resetActiveState) " active alert state reset" else " active alert state preserved"
+        )
+    }
+
+    private fun booleanValue(dataMap: DataMap, key: String, fallback: Boolean): Boolean =
+        if (dataMap.containsKey(key)) dataMap.getBoolean(key) else fallback
+
+    private fun intValue(dataMap: DataMap, key: String, fallback: Int): Int =
+        if (dataMap.containsKey(key)) dataMap.getInt(key) else fallback
+
+    private fun floatValue(dataMap: DataMap, key: String, fallback: Float): Float =
+        if (dataMap.containsKey(key)) dataMap.getFloat(key) else fallback
 }
