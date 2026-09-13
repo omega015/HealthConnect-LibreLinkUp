@@ -205,7 +205,7 @@ object GlucoseAlertManager {
     }
 
     private fun sanitizeRepeatInterval(minutes: Int): Int = when (minutes) {
-        5, 10, 15, 30, 60 -> minutes
+        1, 2, 5, 10, 15, 30, 60 -> minutes
         else -> DEFAULT_REPEAT_INTERVAL_MINUTES
     }
 
