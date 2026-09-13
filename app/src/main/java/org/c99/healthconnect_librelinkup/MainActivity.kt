@@ -814,7 +814,7 @@ fun MainView(
                         expanded = lowRepeatExpanded,
                         onDismissRequest = { lowRepeatExpanded = false }
                     ) {
-                        listOf(5, 10, 15, 30, 60).forEach { minutes ->
+                        listOf(1, 2, 5, 10, 15, 30, 60).forEach { minutes ->
                             DropdownMenuItem(
                                 text = { Text(stringResource(id = R.string.repeat_interval_value, minutes)) },
                                 onClick = {
@@ -891,7 +891,7 @@ fun MainView(
                         expanded = highRepeatExpanded,
                         onDismissRequest = { highRepeatExpanded = false }
                     ) {
-                        listOf(5, 10, 15, 30, 60).forEach { minutes ->
+                        listOf(1, 2, 5, 10, 15, 30, 60).forEach { minutes ->
                             DropdownMenuItem(
                                 text = { Text(stringResource(id = R.string.repeat_interval_value, minutes)) },
                                 onClick = {
