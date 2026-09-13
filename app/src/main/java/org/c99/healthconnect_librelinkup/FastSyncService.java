@@ -84,13 +84,23 @@ public class FastSyncService extends Service {
         }
 
         syncTask = scheduler.scheduleWithFixedDelay(
-                () -> runSync(intervalMinutes),
+                () -> runSyncSafely(intervalMinutes),
                 0,
                 intervalMinutes,
                 TimeUnit.MINUTES
         );
 
         Log.i(TAG, "Foreground fast sync scheduled every " + intervalMinutes + " minutes");
+    }
+
+    private void runSyncSafely(int intervalMinutes) {
+        try {
+            runSync(intervalMinutes);
+        } catch (Exception e) {
+            // ScheduledExecutorService suppresses future executions when a task throws.
+            // Keep Fast mode alive after an unexpected per-sync application failure.
+            Log.e(TAG, "Unexpected fast sync failure; scheduler will continue", e);
+        }
     }
 
     private void runSync(int intervalMinutes) {
