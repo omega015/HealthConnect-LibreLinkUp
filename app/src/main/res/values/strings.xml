@@ -39,9 +39,13 @@
     <string name="high_alert_enabled">High alert</string>
     <string name="low_alert_threshold">Low threshold</string>
     <string name="high_alert_threshold">High threshold</string>
+    <string name="repeat_alert">Repeat while still out of range</string>
+    <string name="repeat_interval">Repeat interval</string>
+    <string name="repeat_interval_value">%1$d minutes</string>
+    <string name="rearm_margin">Re-arm margin (hysteresis)</string>
     <string name="save_alert_settings">Save &amp; send to watch</string>
     <string name="alert_settings_saved">Alert settings sent to watch</string>
-    <string name="alert_settings_invalid">Enter valid thresholds with low below high.</string>
+    <string name="alert_settings_invalid">Enter valid thresholds and non-negative re-arm margins, with low below high.</string>
     <string name="alert_settings_warning">Watch alerts depend on LibreLinkUp cloud, phone sync, and Wear connectivity. They are not a replacement for Abbott/Libre medical alarms.</string>
     <string-array name="api_endpoints">
         <item>https://api.libreview.io</item>
