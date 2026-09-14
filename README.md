@@ -38,7 +38,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the detailed release history and the change
 ### Wear OS
 
 <p align="center">
-  <img src="4088f145-0f6e-4d5e-916f-e2b7610021af.png" alt="LibreLinkUp for HealthConnect 1.6 Wear OS screens" width="900">
+  <img src="librelinkup-wear-v1.6-showcase.png" alt="LibreLinkUp for HealthConnect 1.6 Wear OS screens" width="900">
 </p>
 
 ## Features
