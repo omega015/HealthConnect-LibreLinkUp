@@ -49,8 +49,8 @@
     <string name="save_alert_settings">Save &amp; send to watch</string>
     <string name="alert_settings_saved">Alert settings saved. Waiting for watch confirmation.</string>
     <string name="alert_settings_invalid">Enter valid numeric alert values.</string>
-    <string name="alert_settings_threshold_range_mmol">Low 3.3–5.6 mmol/L; high 6.7–22.2 mmol/L.</string>
-    <string name="alert_settings_threshold_range_mgdl">Low 60–100 mg/dL; high 120–400 mg/dL.</string>
+    <string name="alert_settings_threshold_range_mmol">Allowed alert thresholds: Low 3.3–5.6 mmol/L; High 6.7–22.2 mmol/L.</string>
+    <string name="alert_settings_threshold_range_mgdl">Allowed alert thresholds: Low 60–100 mg/dL; High 120–400 mg/dL.</string>
     <string name="alert_settings_hysteresis_range_mmol">Re-arm margin must be 0–0.5 mmol/L.</string>
     <string name="alert_settings_hysteresis_range_mgdl">Re-arm margin must be 0–9 mg/dL.</string>
     <string name="alert_settings_rearm_overlap">Re-arm margins leave no neutral range.</string>
