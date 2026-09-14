@@ -3,6 +3,7 @@ name: Build test APKs
 on:
   push:
     branches:
+      - main
       - fix-locale-timestamps
       - faster-5-minute-sync
       - configurable-foreground-sync
