@@ -27,11 +27,19 @@ The original project remains the foundation of the application. This fork, maint
 
 See [CHANGELOG.md](CHANGELOG.md) for the detailed release history and the changes introduced by this fork.
 
-![App Screenshot](app.png)
+## Screenshots
 
-![Complication Screenshot](complication.png)
+### Phone app
 
-![Tile Screenshot](wearable/src/main/res/drawable-round/tile_preview.png)
+<p align="center">
+  <img src="librelinkup-phone-v1.6-stitched.png" alt="LibreLinkUp for HealthConnect 1.6 phone app" width="420">
+</p>
+
+### Wear OS
+
+<p align="center">
+  <img src="4088f145-0f6e-4d5e-916f-e2b7610021af.png" alt="LibreLinkUp for HealthConnect 1.6 Wear OS screens" width="900">
+</p>
 
 ## Features
 
@@ -70,7 +78,7 @@ Launch **LibreLinkUp for HealthConnect** on your phone, select your LibreView re
 
 Under **Glucose sync**, choose either Standard or Fast mode. Standard uses Android background scheduling at a 15-minute interval and may be batched or delayed by Android. Fast mode uses a foreground service for more dependable updates. Fast mode can continue to operate when the phone's notification permission is disabled, although Android may still show the service under Active apps depending on the OS version.
 
-Install the Wear OS app (wearable-release.apk) on the watch and grant notification permission if you want watch glucose alerts. The Tile and complication can display the latest reading in either mmol/L or mg/dL.
+Install the Wear OS app (`wearable-release.apk`) on the watch and grant notification permission if you want watch glucose alerts. The Tile and complication can display the latest reading in either mmol/L or mg/dL.
 
 Under **Watch glucose alerts** on the phone, you can configure low and high thresholds, re-arm margins, repeat alerts and persistent vibration, then send those settings to the watch.
 
