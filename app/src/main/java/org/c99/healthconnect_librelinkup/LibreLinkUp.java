@@ -17,12 +17,15 @@
 package org.c99.healthconnect_librelinkup;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Build;
 import android.widget.Toast;
 
 import androidx.security.crypto.EncryptedSharedPreferences;
 import androidx.security.crypto.MasterKey;
 import androidx.work.Constraints;
+import androidx.work.ExistingPeriodicWorkPolicy;
 import androidx.work.NetworkType;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
@@ -36,8 +39,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.Headers;
@@ -48,10 +51,20 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 
 public class LibreLinkUp {
+    public static final String SYNC_WORK_NAME = "glucose-sync";
+    public static final String SYNC_MODE_STANDARD = "standard";
+    public static final String SYNC_MODE_FAST = "fast";
+    public static final int DEFAULT_FAST_SYNC_INTERVAL_MINUTES = 5;
+    public static final long STANDARD_SYNC_INTERVAL_MINUTES = 15;
+
+    private static final String SETTINGS_PREFS = "sync_settings";
+    private static final String KEY_SYNC_MODE = "sync_mode";
+    private static final String KEY_FAST_SYNC_INTERVAL = "fast_sync_interval_minutes";
+
     private AuthTicket authTicket;
     private User user;
-    private Context context;
-    private String LIBRELINKUP_URL = "https://api-us.libreview.io";
+    private final Context context;
+    private String LIBRELINKUP_URL = "https://api.libreview.io";
 
     private final OkHttpClient client = new OkHttpClient();
     private final Moshi moshi = new Moshi.Builder().build();
@@ -78,26 +91,120 @@ public class LibreLinkUp {
         );
     }
 
-    public void schedule() {
-        WorkManager.getInstance(context).cancelAllWork();
+    private SharedPreferences getSyncSettings() {
+        return context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE);
+    }
 
-        if(authTicket != null && authTicket.token != null && !authTicket.token.isEmpty()) {
-            WorkManager.getInstance(context).enqueue(
-                    new PeriodicWorkRequest.Builder(SyncWorker.class, 15, TimeUnit.MINUTES)
-                            .setConstraints(new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                            .addTag("sync")
-                            .build());
-            Toast.makeText(context, "Glucose sync job scheduled", Toast.LENGTH_SHORT).show();
-            android.util.Log.i("LibreLinkUp", "Glucose sync job scheduled");
+    public String getSyncMode() {
+        return getSyncSettings().getString(KEY_SYNC_MODE, SYNC_MODE_STANDARD);
+    }
+
+    public void setSyncMode(String mode) {
+        String safeMode = SYNC_MODE_FAST.equals(mode) ? SYNC_MODE_FAST : SYNC_MODE_STANDARD;
+        getSyncSettings().edit().putString(KEY_SYNC_MODE, safeMode).apply();
+    }
+
+    public int getFastSyncIntervalMinutes() {
+        return sanitizeFastInterval(
+                getSyncSettings().getInt(KEY_FAST_SYNC_INTERVAL, DEFAULT_FAST_SYNC_INTERVAL_MINUTES)
+        );
+    }
+
+    public void setFastSyncIntervalMinutes(int minutes) {
+        getSyncSettings().edit()
+                .putInt(KEY_FAST_SYNC_INTERVAL, sanitizeFastInterval(minutes))
+                .apply();
+    }
+
+    private int sanitizeFastInterval(int minutes) {
+        if (minutes == 1 || minutes == 2 || minutes == 3 || minutes == 5
+                || minutes == 10 || minutes == 15 || minutes == 30) {
+            return minutes;
+        }
+        return DEFAULT_FAST_SYNC_INTERVAL_MINUTES;
+    }
+
+    public void schedule() {
+        if (!hasValidAuthTicket()) {
+            stopAllSync();
+            return;
+        }
+
+        if (SYNC_MODE_FAST.equals(getSyncMode())) {
+            startFastSync();
+        } else {
+            startStandardSync();
         }
     }
 
+    public void applySyncSettings() {
+        schedule();
+    }
+
+    private boolean hasValidAuthTicket() {
+        return authTicket != null && authTicket.token != null && !authTicket.token.isEmpty();
+    }
+
+    private void startStandardSync() {
+        stopFastSync();
+
+        PeriodicWorkRequest request = new PeriodicWorkRequest.Builder(
+                SyncWorker.class,
+                STANDARD_SYNC_INTERVAL_MINUTES,
+                TimeUnit.MINUTES
+        )
+                .setConstraints(new Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build())
+                .addTag("sync")
+                .build();
+
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                SYNC_WORK_NAME,
+                ExistingPeriodicWorkPolicy.UPDATE,
+                request
+        );
+
+        android.util.Log.i("LibreLinkUp", "Standard glucose sync scheduled with WorkManager");
+    }
+
+    private void startFastSync() {
+        WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK_NAME);
+
+        Intent intent = new Intent(context, FastSyncService.class);
+        intent.setAction(FastSyncService.ACTION_START);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent);
+        } else {
+            context.startService(intent);
+        }
+
+        int interval = getFastSyncIntervalMinutes();
+        Toast.makeText(
+                context,
+                "Fast glucose sync enabled every " + interval + " minutes",
+                Toast.LENGTH_SHORT
+        ).show();
+        android.util.Log.i("LibreLinkUp", "Fast glucose sync enabled every " + interval + " minutes");
+    }
+
+    private void stopFastSync() {
+        Intent intent = new Intent(context, FastSyncService.class);
+        intent.setAction(FastSyncService.ACTION_STOP);
+        context.stopService(intent);
+    }
+
+    public void stopAllSync() {
+        WorkManager.getInstance(context).cancelUniqueWork(SYNC_WORK_NAME);
+        stopFastSync();
+    }
+
     public LibreLinkUp(Context context) {
-        this.context = context;
+        this.context = context.getApplicationContext();
         try {
             SharedPreferences cache = getEncryptedSharedPreferences();
 
-            LIBRELINKUP_URL = cache.getString("url", "https://api-us.libreview.io");
+            LIBRELINKUP_URL = cache.getString("url", "https://api.libreview.io");
 
             authTicket = new AuthTicket();
             authTicket.token = cache.getString("auth_token", null);
@@ -130,7 +237,7 @@ public class LibreLinkUp {
         try {
             SharedPreferences.Editor cache = getEncryptedSharedPreferences().edit();
             cache.putString("url", url);
-            cache.commit();
+            cache.apply();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -148,7 +255,7 @@ public class LibreLinkUp {
                 cache.remove("auth_duration");
                 cache.remove("auth_expires");
             }
-            cache.commit();
+            cache.apply();
             authTicket = ticket;
         } catch (Exception e) {
             authTicket = null;
@@ -169,7 +276,7 @@ public class LibreLinkUp {
                 cache.remove("user_first_name");
                 cache.remove("user_last_name");
             }
-            cache.commit();
+            cache.apply();
             this.user = user;
         } catch (Exception e) {
             this.user = null;
@@ -205,21 +312,94 @@ public class LibreLinkUp {
             loginRequest.put("email", email);
             loginRequest.put("password", password);
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new IOException("Unable to create LibreLinkUp login request", e);
         }
 
-        Request request = new Request.Builder()
-                .url(LIBRELINKUP_URL + "/llu/auth/login")
-                .headers(LIBRELINKUP_HEADERS)
-                .post(RequestBody.create(MediaType.parse("application/json; charset=utf-8"), loginRequest.toString()))
-                .build();
+        for (int redirectCount = 0; redirectCount <= 3; redirectCount++) {
+            Request request = new Request.Builder()
+                    .url(LIBRELINKUP_URL + "/llu/auth/login")
+                    .headers(LIBRELINKUP_HEADERS)
+                    .post(RequestBody.create(
+                            MediaType.parse("application/json; charset=utf-8"),
+                            loginRequest.toString()
+                    ))
+                    .build();
 
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful())
-                throw new IOException("Unexpected code " + response);
+            try (Response response = client.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    throw new IOException("Unexpected code " + response);
+                }
 
-            return loginResultJsonAdapter.fromJson(response.body().string());
+                if (response.body() == null) {
+                    throw new IOException("Empty LibreLinkUp login response");
+                }
+
+                String responseBody = response.body().string();
+                JSONObject responseJson;
+                try {
+                    responseJson = new JSONObject(responseBody);
+                } catch (Exception e) {
+                    throw new IOException("Invalid LibreLinkUp login response", e);
+                }
+
+                int status = responseJson.optInt("status", -1);
+                JSONObject dataJson = responseJson.optJSONObject("data");
+                boolean redirect = false;
+                String region = null;
+                boolean hasUser = false;
+                boolean hasAuthTicket = false;
+
+                if (dataJson != null) {
+                    Object redirectValue = dataJson.opt("redirect");
+                    if (redirectValue instanceof Boolean) {
+                        redirect = (Boolean) redirectValue;
+                    } else if (redirectValue != null) {
+                        redirect = Boolean.parseBoolean(String.valueOf(redirectValue));
+                    }
+                    region = dataJson.optString("region", null);
+                    hasUser = dataJson.optJSONObject("user") != null;
+                    hasAuthTicket = dataJson.optJSONObject("authTicket") != null;
+                }
+
+                android.util.Log.i(
+                        "LibreLinkUp",
+                        "Login response: status=" + status
+                                + " redirect=" + redirect
+                                + " region=" + (region == null || region.isEmpty() ? "none" : region)
+                                + " hasUser=" + hasUser
+                                + " hasAuthTicket=" + hasAuthTicket
+                );
+
+                if (status == 0 && redirect) {
+                    if (region == null || region.trim().isEmpty()
+                            || !region.trim().matches("[A-Za-z0-9-]+")) {
+                        throw new IOException("LibreLinkUp returned an invalid redirect region");
+                    }
+
+                    String normalizedRegion = region.trim().toLowerCase(Locale.US);
+                    String redirectedUrl = "https://api-" + normalizedRegion + ".libreview.io";
+                    if (redirectedUrl.equalsIgnoreCase(LIBRELINKUP_URL)) {
+                        throw new IOException("LibreLinkUp regional redirect loop detected");
+                    }
+
+                    android.util.Log.i(
+                            "LibreLinkUp",
+                            "Libre login redirected to region " + normalizedRegion
+                                    + " (" + redirectedUrl + ")"
+                    );
+                    setUrl(redirectedUrl);
+                    continue;
+                }
+
+                LoginResult result = loginResultJsonAdapter.fromJson(responseBody);
+                if (result == null) {
+                    throw new IOException("Unable to parse LibreLinkUp login response");
+                }
+                return result;
+            }
         }
+
+        throw new IOException("Too many LibreLinkUp regional redirects");
     }
 
     public ConnectionsResult connections() throws IOException {
@@ -299,6 +479,8 @@ public class LibreLinkUp {
         public static class LoginResultData {
             User user;
             AuthTicket authTicket;
+            boolean redirect;
+            String region;
         };
         LoginResultData data;
     }

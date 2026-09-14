@@ -18,4 +18,17 @@
     <string name="app_name">LibreLinkUp for HealthConnect</string>
     <string name="tile_label">Glucose</string>
     <string name="complication_label">Glucose</string>
+    <string name="low_glucose_alert_channel">Low glucose alerts</string>
+    <string name="low_glucose_alert_channel_description">Alerts when glucose falls below the configured low threshold</string>
+    <string name="high_glucose_alert_channel">High glucose alerts</string>
+    <string name="high_glucose_alert_channel_description">Alerts when glucose rises above the configured high threshold</string>
+    <string name="low_glucose_alert_title">Low glucose alert</string>
+    <string name="high_glucose_alert_title">High glucose alert</string>
+    <string name="glucose_alert_value">Current glucose: %1$s</string>
+    <string name="glucose_alert_acknowledge">Acknowledge</string>
+    <string name="alert_permission_title">Glucose alerts</string>
+    <string name="alert_permission_explanation">Allow notifications so this watch can vibrate and show high or low glucose alerts configured on your phone.</string>
+    <string name="alert_permission_enable">Enable alert notifications</string>
+    <string name="alert_permission_enabled">Alert notifications are enabled.</string>
+    <string name="alert_permission_denied">Notification permission is not enabled. Glucose alerts cannot be shown.</string>
 </resources>
