@@ -16,7 +16,8 @@
 
 <resources>
     <string name="app_name">LibreLinkUp for HealthConnect</string>
-    <string name="title_activity_main">Login to LibreLinkUp</string>
+    <string name="title_activity_main">LibreLinkUp for HealthConnect</string>
+    <string name="login_section_title">LibreLinkUp account</string>
     <string name="prompt_email">Email</string>
     <string name="prompt_password">Password</string>
     <string name="prompt_url">Server</string>
@@ -24,6 +25,36 @@
     <string name="status_login">Enter your email address and password above to login to LibreLinkUp</string>
     <string name="battery_restricted">⚠️ This app is currently being restricted from running in the background</string>
     <string name="disable_battery_restrictions">Disable Battery Optimizations</string>
+    <string name="sync_section_title">Glucose sync</string>
+    <string name="sync_mode_label">Glucose sync mode</string>
+    <string name="sync_mode_standard">Standard</string>
+    <string name="sync_mode_fast">Fast</string>
+    <string name="standard_sync_explanation">Standard uses Android background scheduling at a 15-minute interval. Android may batch or delay background work.</string>
+    <string name="fast_sync_interval_label">Fast sync interval</string>
+    <string name="fast_sync_interval_value">%1$d minutes</string>
+    <string name="fast_sync_explanation">Fast mode uses a foreground service for more dependable updates. To show or hide the Fast sync notification, use Android Settings → Apps → LibreLinkUp for HealthConnect → Notifications. Fast sync continues to work when notifications are disabled.</string>
+    <string name="alert_settings_title">Watch glucose alerts</string>
+    <string name="alert_units_label">Watch glucose units</string>
+    <string name="alert_units_mmol">mmol/L</string>
+    <string name="alert_units_mgdl">mg/dL</string>
+    <string name="low_alert_enabled">Low alert</string>
+    <string name="high_alert_enabled">High alert</string>
+    <string name="low_alert_threshold">Low threshold</string>
+    <string name="high_alert_threshold">High threshold</string>
+    <string name="persistent_vibration">Persistent vibration until acknowledged</string>
+    <string name="repeat_alert">Repeat while still out of range</string>
+    <string name="repeat_interval">Repeat interval</string>
+    <string name="repeat_interval_value">%1$d minutes</string>
+    <string name="rearm_margin">Re-arm margin (hysteresis)</string>
+    <string name="save_alert_settings">Save &amp; send to watch</string>
+    <string name="alert_settings_saved">Alert settings saved. Waiting for watch confirmation.</string>
+    <string name="alert_settings_invalid">Enter valid numeric alert values.</string>
+    <string name="alert_settings_threshold_range_mmol">Allowed alert thresholds: Low 3.3–5.6 mmol/L; High 6.7–22.2 mmol/L.</string>
+    <string name="alert_settings_threshold_range_mgdl">Allowed alert thresholds: Low 60–100 mg/dL; High 120–400 mg/dL.</string>
+    <string name="alert_settings_hysteresis_range_mmol">Re-arm margin must be 0–0.5 mmol/L.</string>
+    <string name="alert_settings_hysteresis_range_mgdl">Re-arm margin must be 0–9 mg/dL.</string>
+    <string name="alert_settings_rearm_overlap">Re-arm margins leave no neutral range.</string>
+    <string name="alert_settings_warning">Watch alerts depend on LibreLinkUp cloud, phone sync, and Wear connectivity. They are not a replacement for Abbott/Libre medical alarms.</string>
     <string-array name="api_endpoints">
         <item>https://api.libreview.io</item>
         <item>https://api-ae.libreview.io</item>

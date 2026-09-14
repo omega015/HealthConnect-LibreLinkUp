@@ -44,9 +44,12 @@ import com.google.android.horologist.compose.tools.LayoutRootPreview
 import com.google.android.horologist.compose.tools.buildDeviceParameters
 import com.google.android.horologist.tiles.SuspendingTileService
 import org.c99.healthconnect_librelinkup.DataLayerListenerService
+import org.c99.healthconnect_librelinkup.GlucoseAlertManager
 import org.c99.healthconnect_librelinkup.R
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+import java.util.Locale
 
 private const val RESOURCES_VERSION = "1"
 
@@ -88,127 +91,111 @@ class GlucoseTileService : SuspendingTileService() {
             .addIdToImageMapping("arrow_up", ResourceBuilders.ImageResource.Builder()
                 .setAndroidResourceByResId(
                     ResourceBuilders.AndroidImageResourceByResId.Builder()
-                        .setResourceId(R.drawable.arrow_up)
-                        .build()
+                    .setResourceId(R.drawable.arrow_up)
+                    .build()
                 ).build()
             )
             .build()
     }
 
     override suspend fun tileRequest(
-        requestParams: RequestBuilders.TileRequest
-    ): TileBuilders.Tile {
-
-        val glucose = getSharedPreferences("glucose", MODE_PRIVATE)
-        if (glucose != null && glucose.contains(DataLayerListenerService.GLUCOSE_KEY)) {
-            val icon = when (glucose.getInt(DataLayerListenerService.TREND_ARROW_KEY, -1)) {
-                1 -> "arrow_down"
-                2 -> "arrow_down_right"
-                3 -> "arrow_right"
-                4 -> "arrow_up_right"
-                5 -> "arrow_up"
-                else -> ""
-            }
-
-            val color = when (glucose.getInt(DataLayerListenerService.COLOR_KEY, -1)) {
-                1 -> resources.getColor(R.color.normal, theme)
-                2 -> resources.getColor(R.color.high, theme)
-                3 -> resources.getColor(R.color.very_high, theme)
-                4 -> resources.getColor(R.color.low, theme)
-                else -> Colors.DEFAULT.primary
-            }
-
+    requestParams: RequestBuilders.TileRequest
+): TileBuilders.Tile {
+    val glucose = getSharedPreferences("glucose", MODE_PRIVATE)
+    if (glucose.contains(DataLayerListenerService.GLUCOSE_KEY)) {
+        val icon = when (glucose.getInt(DataLayerListenerService.TREND_ARROW_KEY, -1)) {
+            1 -> "arrow_down"
+            2 -> "arrow_down_right"
+            3 -> "arrow_right"
+            4 -> "arrow_up_right"
+            5 -> "arrow_up"
+            else -> ""
+        }
+        val color = when (glucose.getInt(DataLayerListenerService.COLOR_KEY, -1)) {
+            1 -> resources.getColor(R.color.normal, theme)
+            2 -> resources.getColor(R.color.high, theme)
+            3 -> resources.getColor(R.color.very_high, theme)
+            4 -> resources.getColor(R.color.low, theme)
+            else -> Colors.DEFAULT.primary
+        }
+        val secondaryLabel = try {
             val time = ZonedDateTime.parse(
                 glucose.getString(DataLayerListenerService.TIMESTAMP_KEY, "") + " +0000",
-                DateTimeFormatter.ofPattern("M/d/y h:m:s a Z")
+                DateTimeFormatter.ofPattern("M/d/y h:m:s a Z", Locale.US)
             )
-
-            val singleTileTimeline = TimelineBuilders.Timeline.Builder().addTimelineEntry(
-                TimelineBuilders.TimelineEntry.Builder().setLayout(
-                    LayoutElementBuilders.Layout.Builder().setRoot(
-                        tileLayout(this,
-                            glucose.getFloat(DataLayerListenerService.GLUCOSE_KEY, 0f),
-                            icon,
-                            color,
-                            DateUtils.getRelativeTimeSpanString(time.toEpochSecond()*1000L).toString(),
-                            glucose.getInt(DataLayerListenerService.UNITS_KEY, 1))).build()
+            DateUtils.getRelativeTimeSpanString(time.toEpochSecond() * 1000L).toString()
+        } catch (e: DateTimeParseException) {
+            "Time unavailable"
+        }
+        val sourceUnits = glucose.getInt(DataLayerListenerService.UNITS_KEY, 1)
+        val sourceValue = glucose.getFloat(DataLayerListenerService.GLUCOSE_KEY, 0f)
+        val glucoseMgDl = glucose.getFloat(
+            DataLayerListenerService.GLUCOSE_MGDL_KEY,
+            if (sourceUnits == 1) sourceValue else sourceValue * 18f
+        )
+        val displayUnits = getSharedPreferences(GlucoseAlertManager.PREFS_NAME, MODE_PRIVATE)
+            .getString(GlucoseAlertManager.KEY_DISPLAY_UNITS, GlucoseAlertManager.UNITS_MMOL)
+            ?: GlucoseAlertManager.UNITS_MMOL
+        val timeline = TimelineBuilders.Timeline.Builder().addTimelineEntry(
+            TimelineBuilders.TimelineEntry.Builder().setLayout(
+                LayoutElementBuilders.Layout.Builder().setRoot(
+                    tileLayout(this, glucoseMgDl, icon, color, secondaryLabel, displayUnits)
                 ).build()
             ).build()
-
-            return TileBuilders.Tile.Builder().setResourcesVersion(RESOURCES_VERSION)
-                .setFreshnessIntervalMillis(60 * 1000)
-                .setTileTimeline(singleTileTimeline).build()
-        }
-
-        val singleTileTimeline = TimelineBuilders.Timeline.Builder().addTimelineEntry(
-            TimelineBuilders.TimelineEntry.Builder().setLayout(
-                LayoutElementBuilders.Layout.Builder().setRoot(noDataLayout(this)).build()
-            ).build()
         ).build()
-
         return TileBuilders.Tile.Builder().setResourcesVersion(RESOURCES_VERSION)
             .setFreshnessIntervalMillis(60 * 1000)
-            .setTileTimeline(singleTileTimeline).build()
+            .setTileTimeline(timeline).build()
     }
+
+    val timeline = TimelineBuilders.Timeline.Builder().addTimelineEntry(
+        TimelineBuilders.TimelineEntry.Builder().setLayout(
+            LayoutElementBuilders.Layout.Builder().setRoot(noDataLayout(this)).build()
+        ).build()
+    ).build()
+    return TileBuilders.Tile.Builder().setResourcesVersion(RESOURCES_VERSION)
+        .setFreshnessIntervalMillis(60 * 1000)
+        .setTileTimeline(timeline).build()
+}
+
 }
 
 @SuppressLint("DefaultLocale")
-private fun tileLayout(context: Context, glucose: Float, arrow: String, color: Int, secondaryLabel: String, units: Int): LayoutElementBuilders.LayoutElement {
+private fun tileLayout(context: Context, glucoseMgDl: Float, arrow: String, color: Int, secondaryLabel: String, displayUnits: String): LayoutElementBuilders.LayoutElement {
+    val displayValue = if (displayUnits == GlucoseAlertManager.UNITS_MGDL) {
+        String.format(Locale.US, "%.0f", glucoseMgDl)
+    } else {
+        String.format(Locale.US, "%.1f", glucoseMgDl / 18f)
+    }
+    val unitsLabel = if (displayUnits == GlucoseAlertManager.UNITS_MGDL) " mg/dL" else " mmol"
     return PrimaryLayout.Builder(buildDeviceParameters(context.resources))
         .setResponsiveContentInsetEnabled(true)
         .setPrimaryLabelTextContent(Text.Builder(context, "Blood Glucose")
             .setTypography(Typography.TYPOGRAPHY_TITLE3)
-            .setColor(argb(Colors.DEFAULT.primary))
-            .build())
+            .setColor(argb(Colors.DEFAULT.primary)).build())
         .setSecondaryLabelTextContent(Text.Builder(context, secondaryLabel)
             .setTypography(Typography.TYPOGRAPHY_CAPTION3)
-            .setColor(argb(Colors.DEFAULT.onSurface))
-            .build())
+            .setColor(argb(Colors.DEFAULT.onSurface)).build())
         .setContent(
             Chip.Builder(context, ModifiersBuilders.Clickable.Builder().build(), buildDeviceParameters(context.resources))
                 .setChipColors(ChipColors(argb(color), argb(context.getColor(R.color.glucose_text))))
                 .setCustomContent(
                     LayoutElementBuilders.Row.Builder()
-                        .addContent(
-                            LayoutElementBuilders.Image.Builder()
-                                .setResourceId(arrow)
-                                .setWidth(dp(24f))
-                                .setHeight(dp(24f))
-                                .setColorFilter(ColorFilter.Builder().setTint(argb(context.getColor(R.color.glucose_text))).build())
-                                .build()
-
-                        )
-                        .addContent(
-                            LayoutElementBuilders.Row.Builder()
-                                .setVerticalAlignment(VERTICAL_ALIGN_BOTTOM)
-                                .addContent(
-                                    Text.Builder(context,
-                                        when(units) {
-                                            1 -> String.format("%.0f", glucose)
-                                            else -> String.format("%.1f", glucose)
-                                        })
-                                        .setTypography(Typography.TYPOGRAPHY_TITLE1)
-                                        .setColor(argb(context.getColor(R.color.glucose_text)))
-                                        .build()
-                                )
-                                .addContent(
-                                    Text.Builder(context,
-                                        when(units) {
-                                            1 -> " mg/dL"
-                                            else -> " mmol"
-                                        })
-                                        .setTypography(Typography.TYPOGRAPHY_CAPTION2)
-                                        .setColor(argb(context.getColor(R.color.glucose_text)))
-                                        .build()
-                                )
-                                .build()
-                        )
-                        .build()
-                )
-                .setWidth(dp(140f))
-                .build()
-        )
-        .build()
+                        .addContent(LayoutElementBuilders.Image.Builder()
+                            .setResourceId(arrow).setWidth(dp(24f)).setHeight(dp(24f))
+                            .setColorFilter(ColorFilter.Builder().setTint(argb(context.getColor(R.color.glucose_text))).build()).build())
+                        .addContent(LayoutElementBuilders.Row.Builder()
+                            .setVerticalAlignment(VERTICAL_ALIGN_BOTTOM)
+                            .addContent(Text.Builder(context, displayValue)
+                                .setTypography(Typography.TYPOGRAPHY_TITLE1)
+                                .setColor(argb(context.getColor(R.color.glucose_text))).build())
+                            .addContent(Text.Builder(context, unitsLabel)
+                                .setTypography(Typography.TYPOGRAPHY_CAPTION2)
+                                .setColor(argb(context.getColor(R.color.glucose_text))).build())
+                            .build())
+                        .build())
+                .setWidth(dp(140f)).build()
+        ).build()
 }
 
 private fun noDataLayout(context: Context): LayoutElementBuilders.LayoutElement {
@@ -245,7 +232,7 @@ fun NoDataPreview() {
 )
 @Composable
 fun LowPreview() {
-    LayoutRootPreview(root = tileLayout(LocalContext.current, 60f, "arrow_down", LocalContext.current.getColor(R.color.low), "5 minutes ago", 1))
+    LayoutRootPreview(root = tileLayout(LocalContext.current, 60f, "arrow_down", LocalContext.current.getColor(R.color.low), "5 minutes ago", GlucoseAlertManager.UNITS_MGDL))
 }
 @Preview(
     device = Devices.WEAR_OS_SMALL_ROUND,
@@ -255,7 +242,7 @@ fun LowPreview() {
 )
 @Composable
 fun NormalPreview() {
-    LayoutRootPreview(root = tileLayout(LocalContext.current, 100f, "arrow_right", LocalContext.current.getColor(R.color.normal), "10 minutes ago", 1))
+    LayoutRootPreview(root = tileLayout(LocalContext.current, 100f, "arrow_right", LocalContext.current.getColor(R.color.normal), "10 minutes ago", GlucoseAlertManager.UNITS_MGDL))
 }
 @Preview(
     device = Devices.WEAR_OS_SMALL_ROUND,
@@ -265,7 +252,7 @@ fun NormalPreview() {
 )
 @Composable
 fun HighPreview() {
-    LayoutRootPreview(root = tileLayout(LocalContext.current, 180f, "arrow_up_right", LocalContext.current.getColor(R.color.high), "15 minutes ago", 1))
+    LayoutRootPreview(root = tileLayout(LocalContext.current, 180f, "arrow_up_right", LocalContext.current.getColor(R.color.high), "15 minutes ago", GlucoseAlertManager.UNITS_MGDL))
 }
 @Preview(
     device = Devices.WEAR_OS_SMALL_ROUND,
@@ -275,5 +262,5 @@ fun HighPreview() {
 )
 @Composable
 fun VeryHighPreview() {
-    LayoutRootPreview(root = tileLayout(LocalContext.current, 300f, "arrow_up", LocalContext.current.getColor(R.color.very_high), "20 minutes ago", 1))
+    LayoutRootPreview(root = tileLayout(LocalContext.current, 300f, "arrow_up", LocalContext.current.getColor(R.color.very_high), "20 minutes ago", GlucoseAlertManager.UNITS_MGDL))
 }
