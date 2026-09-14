@@ -1,5 +1,6 @@
 <!--
  Copyright 2026 Sam Steele
+ Copyright 2026 omega015
  
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -18,7 +19,13 @@
 
 Syncs the latest glucose reading from FreeStyle Libre sensors via LibreLinkUp to Health Connect and Wear OS.
 
-This fork extends the original project with configurable foreground syncing and optional glucose alerts on Wear OS.
+## About this fork
+
+This repository is a maintained fork of Sam Steele's original [HealthConnect-LibreLinkUp](https://github.com/c99koder/HealthConnect-LibreLinkUp) project.
+
+The original project remains the foundation of the application. This fork, maintained by **omega015**, retains that core architecture while adding substantial phone and Wear OS functionality, including configurable foreground syncing, glucose alerts, unit selection, phone-to-watch settings confirmation and additional reliability improvements.
+
+See [CHANGELOG.md](CHANGELOG.md) for the detailed release history and the changes introduced by this fork.
 
 ![App Screenshot](app.png)
 
@@ -30,6 +37,7 @@ This fork extends the original project with configurable foreground syncing and 
 
 - Sync LibreLinkUp glucose readings to Health Connect.
 - Standard Android background sync or configurable Fast sync using a foreground service.
+- Fast sync intervals from 1 to 30 minutes.
 - Wear OS Tile and complication showing the latest glucose reading.
 - Selectable watch display units: mmol/L or mg/dL.
 - Optional low and high glucose alerts on the watch.
@@ -60,7 +68,7 @@ Open the FreeStyle Libre app and tap **Connected Apps**, then send yourself an i
 
 Launch **LibreLinkUp for HealthConnect** on your phone, select your LibreView region, enter your LibreLinkUp email address and password, then log in.
 
-Under **Glucose sync**, choose either Standard or Fast mode. Standard uses Android background scheduling at a 15-minute interval and may be batched or delayed by Android. Fast mode uses a foreground service for more dependable updates.
+Under **Glucose sync**, choose either Standard or Fast mode. Standard uses Android background scheduling at a 15-minute interval and may be batched or delayed by Android. Fast mode uses a foreground service for more dependable updates. Fast mode can continue to operate when the phone's notification permission is disabled, although Android may still show the service under Active apps depending on the OS version.
 
 If using the Wear OS app, install `wearable-release.apk` on the watch and grant notification permission if you want watch glucose alerts. The Tile and complication can display the latest reading in either mmol/L or mg/dL.
 
@@ -68,9 +76,18 @@ Under **Watch glucose alerts** on the phone, you can configure low and high thre
 
 > Watch alerts depend on LibreLinkUp cloud availability, phone syncing and Wear connectivity. They are not a replacement for Abbott/Libre medical alarms.
 
+## Project attribution
+
+This fork is derived from the original **HealthConnect-LibreLinkUp** project by Sam Steele and continues to use the Apache License 2.0.
+
+Original and substantially derived source files retain Sam Steele's copyright notice. Files substantially modified by this fork may also carry a `Copyright (c) 2026 omega015` notice, while new fork-specific source files use the omega015 notice where appropriate.
+
 ## License
 
-Copyright (C) 2026 Sam Steele. Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
+Copyright (C) 2026 Sam Steele.
+Copyright (C) 2026 omega015 for fork-specific additions and modifications where applicable.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
 
 http://www.apache.org/licenses/LICENSE-2.0
 
