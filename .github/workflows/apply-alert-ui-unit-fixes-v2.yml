@@ -42,8 +42,8 @@ jobs:
 
           path = Path('wearable/src/main/java/org/c99/healthconnect_librelinkup/tile/GlucoseTileService.kt')
           text = path.read_text()
-          marker = '    }\n\n@SuppressLint("DefaultLocale")\nprivate fun tileLayout'
-          replacement = '    }\n}\n\n@SuppressLint("DefaultLocale")\nprivate fun tileLayout'
+          marker = '\n@SuppressLint("DefaultLocale")\nprivate fun tileLayout'
+          replacement = '\n}\n\n@SuppressLint("DefaultLocale")\nprivate fun tileLayout'
           if marker not in text:
               raise SystemExit('Tile class-closure marker not found')
           path.write_text(text.replace(marker, replacement, 1))
