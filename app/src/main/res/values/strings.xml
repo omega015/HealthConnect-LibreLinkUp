@@ -34,7 +34,7 @@
     <string name="fast_sync_interval_value">%1$d minutes</string>
     <string name="fast_sync_explanation">Fast mode uses a foreground service for more dependable updates. To show or hide the Fast sync notification, use Android Settings → Apps → LibreLinkUp for HealthConnect → Notifications. Fast sync continues to work when notifications are disabled.</string>
     <string name="alert_settings_title">Watch glucose alerts</string>
-    <string name="alert_units_label">Alert units</string>
+    <string name="alert_units_label">Watch glucose units</string>
     <string name="alert_units_mmol">mmol/L</string>
     <string name="alert_units_mgdl">mg/dL</string>
     <string name="low_alert_enabled">Low alert</string>
@@ -48,7 +48,12 @@
     <string name="rearm_margin">Re-arm margin (hysteresis)</string>
     <string name="save_alert_settings">Save &amp; send to watch</string>
     <string name="alert_settings_saved">Alert settings saved. Waiting for watch confirmation.</string>
-    <string name="alert_settings_invalid">Enter valid thresholds and non-negative re-arm margins, with low below high.</string>
+    <string name="alert_settings_invalid">Enter valid numeric alert values.</string>
+    <string name="alert_settings_threshold_range_mmol">Low 3.3–5.6 mmol/L; high 6.7–22.2 mmol/L.</string>
+    <string name="alert_settings_threshold_range_mgdl">Low 60–100 mg/dL; high 120–400 mg/dL.</string>
+    <string name="alert_settings_hysteresis_range_mmol">Re-arm margin must be 0–0.5 mmol/L.</string>
+    <string name="alert_settings_hysteresis_range_mgdl">Re-arm margin must be 0–9 mg/dL.</string>
+    <string name="alert_settings_rearm_overlap">Re-arm margins leave no neutral range.</string>
     <string name="alert_settings_warning">Watch alerts depend on LibreLinkUp cloud, phone sync, and Wear connectivity. They are not a replacement for Abbott/Libre medical alarms.</string>
     <string-array name="api_endpoints">
         <item>https://api.libreview.io</item>

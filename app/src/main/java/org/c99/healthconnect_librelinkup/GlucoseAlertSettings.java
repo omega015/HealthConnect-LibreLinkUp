@@ -65,6 +65,11 @@ public final class GlucoseAlertSettings {
     public static final String UNITS_MMOL = "mmol";
     public static final String UNITS_MGDL = "mgdl";
 
+    public static final float MIN_LOW_THRESHOLD_MGDL = 60f;
+    public static final float MAX_LOW_THRESHOLD_MGDL = 100f;
+    public static final float MIN_HIGH_THRESHOLD_MGDL = 120f;
+    public static final float MAX_HIGH_THRESHOLD_MGDL = 400f;
+    public static final float MAX_HYSTERESIS_MGDL = 9f;
     public static final float DEFAULT_LOW_THRESHOLD_MGDL = 70f;
     public static final float DEFAULT_HIGH_THRESHOLD_MGDL = 180f;
     public static final float DEFAULT_HYSTERESIS_MGDL = 5f;
@@ -97,12 +102,18 @@ public final class GlucoseAlertSettings {
     }
 
     public float getLowThresholdMgDl() {
-        return preferences.getFloat(KEY_LOW_THRESHOLD_MGDL, DEFAULT_LOW_THRESHOLD_MGDL);
-    }
+    return Math.max(MIN_LOW_THRESHOLD_MGDL, Math.min(
+            MAX_LOW_THRESHOLD_MGDL,
+            preferences.getFloat(KEY_LOW_THRESHOLD_MGDL, DEFAULT_LOW_THRESHOLD_MGDL)
+    ));
+}
 
     public float getHighThresholdMgDl() {
-        return preferences.getFloat(KEY_HIGH_THRESHOLD_MGDL, DEFAULT_HIGH_THRESHOLD_MGDL);
-    }
+    return Math.max(MIN_HIGH_THRESHOLD_MGDL, Math.min(
+            MAX_HIGH_THRESHOLD_MGDL,
+            preferences.getFloat(KEY_HIGH_THRESHOLD_MGDL, DEFAULT_HIGH_THRESHOLD_MGDL)
+    ));
+}
 
     public boolean isLowPersistentVibrationEnabled() {
         return preferences.getBoolean(KEY_LOW_PERSISTENT_VIBRATION, false);
@@ -139,22 +150,23 @@ public final class GlucoseAlertSettings {
     }
 
     public float getLowHysteresisMgDl() {
-        return Math.max(
-                0f,
-                preferences.getFloat(KEY_LOW_HYSTERESIS_MGDL, DEFAULT_HYSTERESIS_MGDL)
-        );
-    }
+    return Math.max(0f, Math.min(
+            MAX_HYSTERESIS_MGDL,
+            preferences.getFloat(KEY_LOW_HYSTERESIS_MGDL, DEFAULT_HYSTERESIS_MGDL)
+    ));
+}
 
     public float getHighHysteresisMgDl() {
-        return Math.max(
-                0f,
-                preferences.getFloat(KEY_HIGH_HYSTERESIS_MGDL, DEFAULT_HYSTERESIS_MGDL)
-        );
-    }
+    return Math.max(0f, Math.min(
+            MAX_HYSTERESIS_MGDL,
+            preferences.getFloat(KEY_HIGH_HYSTERESIS_MGDL, DEFAULT_HYSTERESIS_MGDL)
+    ));
+}
 
     public String getDisplayUnits() {
-        return preferences.getString(KEY_DISPLAY_UNITS, UNITS_MMOL);
-    }
+    String units = preferences.getString(KEY_DISPLAY_UNITS, UNITS_MMOL);
+    return UNITS_MGDL.equals(units) ? UNITS_MGDL : UNITS_MMOL;
+}
 
     public void saveAndSend(
             boolean lowEnabled,
@@ -173,8 +185,8 @@ public final class GlucoseAlertSettings {
         preferences.edit()
                 .putBoolean(KEY_LOW_ENABLED, lowEnabled)
                 .putBoolean(KEY_HIGH_ENABLED, highEnabled)
-                .putFloat(KEY_LOW_THRESHOLD_MGDL, lowThresholdMgDl)
-                .putFloat(KEY_HIGH_THRESHOLD_MGDL, highThresholdMgDl)
+                .putFloat(KEY_LOW_THRESHOLD_MGDL, Math.max(MIN_LOW_THRESHOLD_MGDL, Math.min(MAX_LOW_THRESHOLD_MGDL, lowThresholdMgDl)))
+                .putFloat(KEY_HIGH_THRESHOLD_MGDL, Math.max(MIN_HIGH_THRESHOLD_MGDL, Math.min(MAX_HIGH_THRESHOLD_MGDL, highThresholdMgDl)))
                 .putBoolean(KEY_LOW_PERSISTENT_VIBRATION, lowPersistentVibration)
                 .putBoolean(KEY_HIGH_PERSISTENT_VIBRATION, highPersistentVibration)
                 .putBoolean(KEY_LOW_REPEAT_ENABLED, lowRepeatEnabled)
@@ -187,9 +199,9 @@ public final class GlucoseAlertSettings {
                         KEY_HIGH_REPEAT_INTERVAL_MINUTES,
                         sanitizeRepeatInterval(highRepeatIntervalMinutes)
                 )
-                .putFloat(KEY_LOW_HYSTERESIS_MGDL, Math.max(0f, lowHysteresisMgDl))
-                .putFloat(KEY_HIGH_HYSTERESIS_MGDL, Math.max(0f, highHysteresisMgDl))
-                .putString(KEY_DISPLAY_UNITS, displayUnits)
+                .putFloat(KEY_LOW_HYSTERESIS_MGDL, Math.max(0f, Math.min(MAX_HYSTERESIS_MGDL, lowHysteresisMgDl)))
+                .putFloat(KEY_HIGH_HYSTERESIS_MGDL, Math.max(0f, Math.min(MAX_HYSTERESIS_MGDL, highHysteresisMgDl)))
+                .putString(KEY_DISPLAY_UNITS, UNITS_MGDL.equals(displayUnits) ? UNITS_MGDL : UNITS_MMOL)
                 .apply();
 
         sendToWearInternal(false, true, 0L, true);
@@ -265,6 +277,7 @@ public final class GlucoseAlertSettings {
         );
         request.getDataMap().putFloat(KEY_LOW_HYSTERESIS_MGDL, getLowHysteresisMgDl());
         request.getDataMap().putFloat(KEY_HIGH_HYSTERESIS_MGDL, getHighHysteresisMgDl());
+    request.getDataMap().putString(KEY_DISPLAY_UNITS, getDisplayUnits());
         request.getDataMap().putLong(KEY_REQUEST_ID, requestId);
         request.getDataMap().putLong(KEY_UPDATED_AT, now);
 

@@ -27,6 +27,7 @@ import androidx.wear.watchface.complications.data.ShortTextComplicationData
 import androidx.wear.watchface.complications.datasource.ComplicationRequest
 import androidx.wear.watchface.complications.datasource.SuspendingComplicationDataSourceService
 import org.c99.healthconnect_librelinkup.DataLayerListenerService
+import org.c99.healthconnect_librelinkup.GlucoseAlertManager
 import org.c99.healthconnect_librelinkup.R
 
 class GlucoseComplicationService : SuspendingComplicationDataSourceService() {
@@ -39,37 +40,39 @@ class GlucoseComplicationService : SuspendingComplicationDataSourceService() {
     }
 
     @SuppressLint("DefaultLocale")
-    override suspend fun onComplicationRequest(request: ComplicationRequest): ComplicationData {
-        try {
-            val glucose = getSharedPreferences("glucose", MODE_PRIVATE)
-            if (glucose != null && glucose.contains(DataLayerListenerService.GLUCOSE_KEY)) {
-                val icon = when (glucose.getInt(DataLayerListenerService.TREND_ARROW_KEY, -1)) {
-                    1 -> Icon.createWithResource(this, R.drawable.arrow_down)
-                    2 -> Icon.createWithResource(this, R.drawable.arrow_down_right)
-                    3 -> Icon.createWithResource(this, R.drawable.arrow_right)
-                    4 -> Icon.createWithResource(this, R.drawable.arrow_up_right)
-                    5 -> Icon.createWithResource(this, R.drawable.arrow_up)
-                    else -> Icon.createWithResource(this, R.drawable.water_drop)
-                }
-
-                if (glucose.getInt(DataLayerListenerService.UNITS_KEY, 1) == 1) {
-                    return createComplicationData(
-                        icon,
-                        String.format("%.0f", glucose.getFloat(DataLayerListenerService.GLUCOSE_KEY, 0f))
-                    )
-                } else {
-                    return createComplicationData(
-                        icon,
-                        String.format("%.1f", glucose.getFloat(DataLayerListenerService.GLUCOSE_KEY, 0f))
-                    )
-                }
-
+override suspend fun onComplicationRequest(request: ComplicationRequest): ComplicationData {
+    try {
+        val glucose = getSharedPreferences("glucose", MODE_PRIVATE)
+        if (glucose.contains(DataLayerListenerService.GLUCOSE_KEY)) {
+            val icon = when (glucose.getInt(DataLayerListenerService.TREND_ARROW_KEY, -1)) {
+                1 -> Icon.createWithResource(this, R.drawable.arrow_down)
+                2 -> Icon.createWithResource(this, R.drawable.arrow_down_right)
+                3 -> Icon.createWithResource(this, R.drawable.arrow_right)
+                4 -> Icon.createWithResource(this, R.drawable.arrow_up_right)
+                5 -> Icon.createWithResource(this, R.drawable.arrow_up)
+                else -> Icon.createWithResource(this, R.drawable.water_drop)
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
+            val sourceUnits = glucose.getInt(DataLayerListenerService.UNITS_KEY, 1)
+            val sourceValue = glucose.getFloat(DataLayerListenerService.GLUCOSE_KEY, 0f)
+            val glucoseMgDl = glucose.getFloat(
+                DataLayerListenerService.GLUCOSE_MGDL_KEY,
+                if (sourceUnits == 1) sourceValue else sourceValue * 18f
+            )
+            val displayUnits = getSharedPreferences(GlucoseAlertManager.PREFS_NAME, MODE_PRIVATE)
+                .getString(GlucoseAlertManager.KEY_DISPLAY_UNITS, GlucoseAlertManager.UNITS_MMOL)
+                ?: GlucoseAlertManager.UNITS_MMOL
+            val value = if (displayUnits == GlucoseAlertManager.UNITS_MGDL) {
+                String.format("%.0f", glucoseMgDl)
+            } else {
+                String.format("%.1f", glucoseMgDl / 18f)
+            }
+            return createComplicationData(icon, value)
         }
-        return NoDataComplicationData()
+    } catch (e: Exception) {
+        e.printStackTrace()
     }
+    return NoDataComplicationData()
+}
 
     private fun createComplicationData(icon: Icon, glucose: String) =
         ShortTextComplicationData.Builder(

@@ -65,6 +65,7 @@ public final class GlucoseSync {
     private static final long HEALTH_CONNECT_INSERT_TIMEOUT_SECONDS = 30;
 
     private static final String GLUCOSE_KEY = "org.c99.healthconnect_librelinkup.glucose";
+    private static final String GLUCOSE_MGDL_KEY = "org.c99.healthconnect_librelinkup.glucoseMgDl";
     private static final String TREND_ARROW_KEY = "org.c99.healthconnect_librelinkup.trendArrow";
     private static final String COLOR_KEY = "org.c99.healthconnect_librelinkup.color";
     private static final String UNITS_KEY = "org.c99.healthconnect_librelinkup.units";
@@ -315,6 +316,7 @@ public final class GlucoseSync {
 
             PutDataMapRequest putDataMapRequest = PutDataMapRequest.create("/glucose");
             putDataMapRequest.getDataMap().putFloat(GLUCOSE_KEY, gm.Value);
+    putDataMapRequest.getDataMap().putFloat(GLUCOSE_MGDL_KEY, gm.ValueInMgPerDl);
             putDataMapRequest.getDataMap().putInt(COLOR_KEY, gm.MeasurementColor);
             putDataMapRequest.getDataMap().putInt(TREND_ARROW_KEY, gm.TrendArrow);
             putDataMapRequest.getDataMap().putInt(UNITS_KEY, gm.GlucoseUnits);
