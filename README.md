@@ -70,7 +70,7 @@ Launch **LibreLinkUp for HealthConnect** on your phone, select your LibreView re
 
 Under **Glucose sync**, choose either Standard or Fast mode. Standard uses Android background scheduling at a 15-minute interval and may be batched or delayed by Android. Fast mode uses a foreground service for more dependable updates. Fast mode can continue to operate when the phone's notification permission is disabled, although Android may still show the service under Active apps depending on the OS version.
 
-If using the Wear OS app, install `wearable-release.apk` on the watch and grant notification permission if you want watch glucose alerts. The Tile and complication can display the latest reading in either mmol/L or mg/dL.
+Install the Wear OS app (wearable-release.apk) on the watch and grant notification permission if you want watch glucose alerts. The Tile and complication can display the latest reading in either mmol/L or mg/dL.
 
 Under **Watch glucose alerts** on the phone, you can configure low and high thresholds, re-arm margins, repeat alerts and persistent vibration, then send those settings to the watch.
 
