@@ -22,31 +22,81 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Restore release signing key
+        shell: bash
+        env:
+          ANDROID_SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
+        run: |
+          KEYSTORE="$RUNNER_TEMP/librelinkup-release.jks"
+          printf '%s' "$ANDROID_SIGNING_KEY" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          test -s "$KEYSTORE"
+
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
       - name: Build phone and watch release APKs
         run: ./gradlew :app:assembleRelease :wearable:assembleRelease --stacktrace
 
-      - name: Report APK sizes
+      - name: Sign and verify release APKs
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          KEYSTORE="$RUNNER_TEMP/librelinkup-release.jks"
+          BUILD_TOOLS_VERSION="$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          ZIPALIGN="$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/zipalign"
+          APKSIGNER="$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner"
+
+          echo "Using Android build-tools $BUILD_TOOLS_VERSION for signing"
+          mkdir -p release-apks
+
+          sign_apk() {
+            src="$1"
+            dst="$2"
+            aligned="$RUNNER_TEMP/$(basename "$dst" .apk)-aligned.apk"
+
+            "$ZIPALIGN" -P 16 -f 4 "$src" "$aligned"
+            "$APKSIGNER" sign \
+              --ks "$KEYSTORE" \
+              --ks-key-alias librelinkup-release \
+              --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
+              --key-pass env:ANDROID_KEY_PASSWORD \
+              --out "$dst" \
+              "$aligned"
+
+            "$ZIPALIGN" -c -P 16 4 "$dst"
+            "$APKSIGNER" verify --verbose --print-certs "$dst"
+            rm -f "$aligned"
+          }
+
+          sign_apk app/build/outputs/apk/release/app-release-unsigned.apk release-apks/app-release.apk
+          sign_apk wearable/build/outputs/apk/release/wearable-release-unsigned.apk release-apks/wearable-release.apk
+
+      - name: Report signed APK sizes
         shell: bash
         run: |
-          echo "Release APK sizes:"
-          find app/build/outputs/apk/release wearable/build/outputs/apk/release \
-            -type f -name '*.apk' -print0 | while IFS= read -r -d '' apk; do
-              bytes=$(stat -c '%s' "$apk")
-              mib=$(awk -v bytes="$bytes" 'BEGIN { printf "%.2f", bytes / 1048576 }')
-              printf '%s: %s bytes (%s MiB)\n' "$apk" "$bytes" "$mib"
-            done
+          echo "Signed release APK sizes:"
+          for apk in release-apks/*.apk; do
+            bytes=$(stat -c '%s' "$apk")
+            mib=$(awk -v bytes="$bytes" 'BEGIN { printf "%.2f", bytes / 1048576 }')
+            printf '%s: %s bytes (%s MiB)\n' "$apk" "$bytes" "$mib"
+          done
 
       - name: Upload phone release APK
         uses: actions/upload-artifact@v4
         with:
           name: phone-release-apk
-          path: app/build/outputs/apk/release/*.apk
+          path: release-apks/app-release.apk
 
       - name: Upload watch release APK
         uses: actions/upload-artifact@v4
         with:
           name: wearable-release-apk
-          path: wearable/build/outputs/apk/release/*.apk
+          path: release-apks/wearable-release.apk
+
+      - name: Remove restored signing key
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/librelinkup-release.jks"
