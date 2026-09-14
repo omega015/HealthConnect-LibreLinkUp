@@ -291,7 +291,18 @@ class MainActivity : ComponentActivity() {
 
     private fun formatValue(mgDl: Float, units: String): String {
         return if (units == GlucoseAlertSettings.UNITS_MGDL) {
-            String.format(Locale.US, "%.0f", mgDl)
+            // The permitted mmol/L boundaries are rounded display equivalents of the
+            // canonical mg/dL limits. Snap those exact converted boundary values back to
+            // their canonical mg/dL limits so changing units never makes a valid setting
+            // become invalid (for example 3.3 mmol/L -> 60 mg/dL, not 59 mg/dL).
+            val displayMgDl = when {
+                mgDl in 59.35f..59.45f -> 60f
+                mgDl in 100.75f..100.85f -> 100f
+                mgDl in 120.55f..120.65f -> 120f
+                mgDl in 399.55f..399.65f -> 400f
+                else -> mgDl
+            }
+            String.format(Locale.US, "%.0f", displayMgDl)
         } else {
             String.format(Locale.US, "%.1f", mgDl / 18f)
         }
