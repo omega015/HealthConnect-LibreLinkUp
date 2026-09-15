@@ -32,7 +32,7 @@ import org.c99.healthconnect_librelinkup.GlucoseAlertManager
 import org.c99.healthconnect_librelinkup.R
 import java.util.Locale
 
-class GlucoseComplicationService : SuspendingComplicationDataSourceService() {
+open class GlucoseComplicationService : SuspendingComplicationDataSourceService() {
 
     override fun getPreviewData(type: ComplicationType): ComplicationData? {
         val icon = Icon.createWithResource(this, R.drawable.water_drop)
