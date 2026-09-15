@@ -4,6 +4,28 @@ All notable changes to this maintained fork of **HealthConnect-LibreLinkUp** are
 
 The project was originally created by Sam Steele. Version 1.6 is the first release of this fork maintained by **omega015** and is based on the upstream 1.5 codebase.
 
+## [1.7] - 2026-09-15
+
+### Wear OS complication compatibility
+
+- Expanded Wear OS complication support for Samsung watch faces and other faces that accept different complication data types.
+- Added four discoverable complication providers so compatible slots can choose the representation they support:
+  - **LibreLinkUp - Glucose** for text-capable slots.
+  - **LibreLinkUp - Glucose + trend** for text-capable slots with a Unicode trend arrow appended to the glucose value.
+  - **LibreLinkUp - Glucose (big)** for image/icon-capable slots.
+  - **LibreLinkUp - Glucose + trend (big)** for image/icon-capable slots with the glucose value and trend arrow rendered together.
+- Added support for `SHORT_TEXT`, `RANGED_VALUE` and `LONG_TEXT` complication types for the text providers.
+- Added `ICON` and `SMALL_IMAGE` providers for watch-face slots that reject text complications.
+- Added adaptive bitmap rendering for glucose values in image complications.
+- Added live trend-arrow rendering for the glucose + trend variants.
+- Prevented duplicate trend arrows on watch faces that render both complication text and icon fields by using a neutral icon for the text-based glucose + trend provider.
+- New glucose readings and display-unit changes now request refreshes for all four complication providers.
+- Tested on physical Samsung Wear OS watch faces with text-only, image-only and mixed complication slots, including automatic refresh on new LibreLinkUp readings.
+
+### Build and release
+
+- Updated phone and wearable apps to `versionCode 7` / `versionName 1.7`.
+
 ## [1.6] - 2026-09-14
 
 ### Highlights
