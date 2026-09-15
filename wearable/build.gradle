@@ -27,8 +27,8 @@ android {
         applicationId "org.c99.healthconnect_librelinkup"
         minSdk 30
         targetSdk 34
-        versionCode 6
-        versionName "1.6"
+        versionCode 7
+        versionName "1.7"
         vectorDrawables {
             useSupportLibrary true
         }
