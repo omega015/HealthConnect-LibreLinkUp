@@ -45,9 +45,14 @@ open class GlucoseComplicationService : SuspendingComplicationDataSourceService(
 
     protected open val includeTrendInText: Boolean = false
     protected open val includeTrendInImage: Boolean = false
+    protected open val useTrendIconInText: Boolean = true
 
     override fun getPreviewData(type: ComplicationType): ComplicationData? {
-        val icon = Icon.createWithResource(this, R.drawable.arrow_up_right)
+        val icon = if (useTrendIconInText) {
+            Icon.createWithResource(this, R.drawable.arrow_up_right)
+        } else {
+            Icon.createWithResource(this, R.drawable.water_drop)
+        }
         val previewTrend = "↗"
         val previewTextValue = valueWithOptionalTrend("5.5", previewTrend, includeTrendInText)
         val previewImageValue = valueWithOptionalTrend("5.5", previewTrend, includeTrendInImage)
@@ -93,7 +98,11 @@ open class GlucoseComplicationService : SuspendingComplicationDataSourceService(
             val glucose = getSharedPreferences("glucose", MODE_PRIVATE)
             if (glucose.contains(DataLayerListenerService.GLUCOSE_KEY)) {
                 val trendArrow = glucose.getInt(DataLayerListenerService.TREND_ARROW_KEY, -1)
-                val icon = trendIcon(trendArrow)
+                val icon = if (useTrendIconInText) {
+                    trendIcon(trendArrow)
+                } else {
+                    Icon.createWithResource(this, R.drawable.water_drop)
+                }
                 val sourceUnits = glucose.getInt(DataLayerListenerService.UNITS_KEY, 1)
                 val sourceValue = glucose.getFloat(DataLayerListenerService.GLUCOSE_KEY, 0f)
                 val glucoseMgDl = glucose.getFloat(
