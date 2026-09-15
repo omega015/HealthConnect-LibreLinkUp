@@ -46,7 +46,8 @@ See [CHANGELOG.md](CHANGELOG.md) for the detailed release history and the change
 - Sync LibreLinkUp glucose readings to Health Connect.
 - Standard Android background sync or configurable Fast sync using a foreground service.
 - Fast sync intervals from 1 to 30 minutes.
-- Wear OS Tile and complication showing the latest glucose reading.
+- Wear OS Tile showing the latest glucose reading.
+- Wear OS complication variants for broad watch-face compatibility, including glucose-only and glucose + trend options for both text-capable and image/icon-capable slots.
 - Selectable watch display units: mmol/L or mg/dL.
 - Optional low and high glucose alerts on the watch.
 - Configurable alert thresholds, re-arm margins (hysteresis), repeat intervals and persistent vibration.
@@ -78,7 +79,7 @@ Launch **LibreLinkUp for HealthConnect** on your phone, select your LibreView re
 
 Under **Glucose sync**, choose either Standard or Fast mode. Standard uses Android background scheduling at a 15-minute interval and may be batched or delayed by Android. Fast mode uses a foreground service for more dependable updates. Fast mode can continue to operate when the phone's notification permission is disabled, although Android may still show the service under Active apps depending on the OS version.
 
-Install the Wear OS app (`wearable-release.apk`) on the watch and grant notification permission if you want watch glucose alerts. The Tile and complication can display the latest reading in either mmol/L or mg/dL.
+Install the Wear OS app (`wearable-release.apk`) on the watch and grant notification permission if you want watch glucose alerts. The Tile and complication providers can display the latest reading in either mmol/L or mg/dL. Different watch faces expose different complication data types, so the app provides separate text and image/icon variants, with optional trend arrows.
 
 Under **Watch glucose alerts** on the phone, you can configure low and high thresholds, re-arm margins, repeat alerts and persistent vibration, then send those settings to the watch.
 
