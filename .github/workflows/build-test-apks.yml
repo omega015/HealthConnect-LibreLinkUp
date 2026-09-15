@@ -7,6 +7,7 @@ on:
       - fix-locale-timestamps
       - faster-5-minute-sync
       - configurable-foreground-sync
+      - samsung-complication-compat-test
   workflow_dispatch:
 
 jobs:
