@@ -43,37 +43,45 @@ import java.util.Locale
 
 open class GlucoseComplicationService : SuspendingComplicationDataSourceService() {
 
+    protected open val includeTrendInText: Boolean = false
+    protected open val includeTrendInImage: Boolean = false
+
     override fun getPreviewData(type: ComplicationType): ComplicationData? {
-        val icon = Icon.createWithResource(this, R.drawable.water_drop)
+        val icon = Icon.createWithResource(this, R.drawable.arrow_up_right)
+        val previewTrend = "↗"
+        val previewTextValue = valueWithOptionalTrend("5.5", previewTrend, includeTrendInText)
+        val previewImageValue = valueWithOptionalTrend("5.5", previewTrend, includeTrendInImage)
+        val description = "5.5 mmol/L ↗"
+
         return when (type) {
             ComplicationType.SHORT_TEXT -> createShortTextData(
                 icon = icon,
-                value = "5.5",
-                description = "5.5 mmol/L"
+                value = previewTextValue,
+                description = description
             )
 
             ComplicationType.RANGED_VALUE -> createRangedValueData(
                 icon = icon,
-                value = "5.5",
-                description = "5.5 mmol/L",
+                value = previewTextValue,
+                description = description,
                 rangeValue = 5.5f,
                 rangeMin = 2.2f,
                 rangeMax = 22.2f
             )
 
             ComplicationType.LONG_TEXT -> createLongTextData(
-                text = "5.5 mmol/L",
-                description = "5.5 mmol/L"
+                text = if (includeTrendInText) "5.5 mmol/L ↗" else "5.5 mmol/L",
+                description = description
             )
 
             ComplicationType.MONOCHROMATIC_IMAGE -> createMonochromaticImageData(
-                value = "5.5",
-                description = "5.5 mmol/L"
+                value = previewImageValue,
+                description = description
             )
 
             ComplicationType.SMALL_IMAGE -> createSmallImageData(
-                value = "5.5",
-                description = "5.5 mmol/L"
+                value = previewImageValue,
+                description = description
             )
 
             else -> NoDataComplicationData()
@@ -104,6 +112,8 @@ open class GlucoseComplicationService : SuspendingComplicationDataSourceService(
                 }
                 val unitsLabel = if (useMgDl) "mg/dL" else "mmol/L"
                 val trend = trendSymbol(trendArrow)
+                val textValue = valueWithOptionalTrend(displayValue, trend, includeTrendInText)
+                val imageValue = valueWithOptionalTrend(displayValue, trend, includeTrendInImage)
                 val description = listOf(displayValue, unitsLabel, trend)
                     .filter { it.isNotEmpty() }
                     .joinToString(" ")
@@ -111,7 +121,7 @@ open class GlucoseComplicationService : SuspendingComplicationDataSourceService(
                 return when (request.complicationType) {
                     ComplicationType.SHORT_TEXT -> createShortTextData(
                         icon = icon,
-                        value = displayValue,
+                        value = textValue,
                         description = description
                     )
 
@@ -121,7 +131,7 @@ open class GlucoseComplicationService : SuspendingComplicationDataSourceService(
                         val rangeMax = if (useMgDl) 400f else 400f / 18f
                         createRangedValueData(
                             icon = icon,
-                            value = displayValue,
+                            value = textValue,
                             description = description,
                             rangeValue = rangeValue,
                             rangeMin = rangeMin,
@@ -130,19 +140,25 @@ open class GlucoseComplicationService : SuspendingComplicationDataSourceService(
                     }
 
                     ComplicationType.LONG_TEXT -> {
-                        val longText = listOf(displayValue, unitsLabel, trend)
-                            .filter { it.isNotEmpty() }
-                            .joinToString(" ")
+                        val longText = if (includeTrendInText) {
+                            listOf(displayValue, unitsLabel, trend)
+                                .filter { it.isNotEmpty() }
+                                .joinToString(" ")
+                        } else {
+                            listOf(displayValue, unitsLabel)
+                                .filter { it.isNotEmpty() }
+                                .joinToString(" ")
+                        }
                         createLongTextData(longText, description)
                     }
 
                     ComplicationType.MONOCHROMATIC_IMAGE -> createMonochromaticImageData(
-                        value = displayValue,
+                        value = imageValue,
                         description = description
                     )
 
                     ComplicationType.SMALL_IMAGE -> createSmallImageData(
-                        value = displayValue,
+                        value = imageValue,
                         description = description
                     )
 
@@ -154,6 +170,9 @@ open class GlucoseComplicationService : SuspendingComplicationDataSourceService(
         }
         return NoDataComplicationData()
     }
+
+    private fun valueWithOptionalTrend(value: String, trend: String, includeTrend: Boolean): String =
+        if (includeTrend && trend.isNotEmpty()) "$value $trend" else value
 
     private fun trendIcon(trendArrow: Int): Icon = when (trendArrow) {
         1 -> Icon.createWithResource(this, R.drawable.arrow_down)
