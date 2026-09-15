@@ -7,3 +7,5 @@ package org.c99.healthconnect_librelinkup.complication
 class ShortGlucoseComplicationService : GlucoseComplicationService()
 
 class RangeGlucoseComplicationService : GlucoseComplicationService()
+
+class BigGlucoseComplicationService : GlucoseComplicationService()
