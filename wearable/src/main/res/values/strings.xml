@@ -17,10 +17,10 @@
 <resources>
     <string name="app_name">LibreLinkUp for HealthConnect</string>
     <string name="tile_label">Glucose</string>
-    <string name="complication_label">LibreLinkUp – Glucose</string>
-    <string name="complication_short_label">LibreLinkUp - Glucose (short)</string>
-    <string name="complication_range_label">LibreLinkUp - Glucose (range)</string>
+    <string name="complication_label">LibreLinkUp - Glucose</string>
+    <string name="complication_trend_label">LibreLinkUp - Glucose + trend</string>
     <string name="complication_big_label">LibreLinkUp - Glucose (big)</string>
+    <string name="complication_big_trend_label">LibreLinkUp - Glucose + trend (big)</string>
     <string name="low_glucose_alert_channel">Low glucose alerts</string>
     <string name="low_glucose_alert_channel_description">Alerts when glucose falls below the configured low threshold</string>
     <string name="high_glucose_alert_channel">High glucose alerts</string>
