@@ -1,9 +1,6 @@
 name: Build release APKs
 
 on:
-  push:
-    branches:
-      - samsung-complication-compat-test
   workflow_dispatch:
 
 jobs:
