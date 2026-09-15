@@ -26,6 +26,7 @@ import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
+import org.c99.healthconnect_librelinkup.complication.BigGlucoseComplicationService
 import org.c99.healthconnect_librelinkup.complication.GlucoseComplicationService
 import org.c99.healthconnect_librelinkup.tile.GlucoseTileService
 
@@ -79,6 +80,10 @@ class DataLayerListenerService : WearableListenerService() {
             ComplicationDataSourceUpdateRequester.create(
                 applicationContext,
                 ComponentName(applicationContext, GlucoseComplicationService::class.java)
+            ).requestUpdateAll()
+            ComplicationDataSourceUpdateRequester.create(
+                applicationContext,
+                ComponentName(applicationContext, BigGlucoseComplicationService::class.java)
             ).requestUpdateAll()
             TileService.getUpdater(applicationContext).requestUpdate(GlucoseTileService::class.java)
         }
@@ -163,6 +168,10 @@ class DataLayerListenerService : WearableListenerService() {
         ComplicationDataSourceUpdateRequester.create(
             applicationContext,
             ComponentName(applicationContext, GlucoseComplicationService::class.java)
+        ).requestUpdateAll()
+        ComplicationDataSourceUpdateRequester.create(
+            applicationContext,
+            ComponentName(applicationContext, BigGlucoseComplicationService::class.java)
         ).requestUpdateAll()
         TileService.getUpdater(applicationContext).requestUpdate(GlucoseTileService::class.java)
     }
