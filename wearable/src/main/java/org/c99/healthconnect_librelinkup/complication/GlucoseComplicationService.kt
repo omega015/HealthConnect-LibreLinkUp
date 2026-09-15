@@ -16,15 +16,24 @@
 
 package org.c99.healthconnect_librelinkup.complication
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.drawable.Icon
 import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.complications.data.ComplicationType
 import androidx.wear.watchface.complications.data.LongTextComplicationData
 import androidx.wear.watchface.complications.data.MonochromaticImage
+import androidx.wear.watchface.complications.data.MonochromaticImageComplicationData
 import androidx.wear.watchface.complications.data.NoDataComplicationData
 import androidx.wear.watchface.complications.data.PlainComplicationText
 import androidx.wear.watchface.complications.data.RangedValueComplicationData
 import androidx.wear.watchface.complications.data.ShortTextComplicationData
+import androidx.wear.watchface.complications.data.SmallImage
+import androidx.wear.watchface.complications.data.SmallImageComplicationData
+import androidx.wear.watchface.complications.data.SmallImageType
 import androidx.wear.watchface.complications.datasource.ComplicationRequest
 import androidx.wear.watchface.complications.datasource.SuspendingComplicationDataSourceService
 import org.c99.healthconnect_librelinkup.DataLayerListenerService
@@ -54,6 +63,16 @@ open class GlucoseComplicationService : SuspendingComplicationDataSourceService(
 
             ComplicationType.LONG_TEXT -> createLongTextData(
                 text = "5.5 mmol/L",
+                description = "5.5 mmol/L"
+            )
+
+            ComplicationType.MONOCHROMATIC_IMAGE -> createMonochromaticImageData(
+                value = "5.5",
+                description = "5.5 mmol/L"
+            )
+
+            ComplicationType.SMALL_IMAGE -> createSmallImageData(
+                value = "5.5",
                 description = "5.5 mmol/L"
             )
 
@@ -117,6 +136,16 @@ open class GlucoseComplicationService : SuspendingComplicationDataSourceService(
                         createLongTextData(longText, description)
                     }
 
+                    ComplicationType.MONOCHROMATIC_IMAGE -> createMonochromaticImageData(
+                        value = displayValue,
+                        description = description
+                    )
+
+                    ComplicationType.SMALL_IMAGE -> createSmallImageData(
+                        value = displayValue,
+                        description = description
+                    )
+
                     else -> NoDataComplicationData()
                 }
             }
@@ -179,4 +208,53 @@ open class GlucoseComplicationService : SuspendingComplicationDataSourceService(
         PlainComplicationText.Builder(text).build(),
         PlainComplicationText.Builder(description).build()
     ).build()
+
+    private fun createMonochromaticImageData(
+        value: String,
+        description: String
+    ): ComplicationData {
+        val icon = createGlucoseImageIcon(value)
+        val image = MonochromaticImage.Builder(icon).build()
+        return MonochromaticImageComplicationData.Builder(
+            image,
+            PlainComplicationText.Builder(description).build()
+        ).build()
+    }
+
+    private fun createSmallImageData(
+        value: String,
+        description: String
+    ): ComplicationData {
+        val icon = createGlucoseImageIcon(value)
+        val image = SmallImage.Builder(
+            icon,
+            SmallImageType.PHOTO
+        ).build()
+        return SmallImageComplicationData.Builder(
+            image,
+            PlainComplicationText.Builder(description).build()
+        ).build()
+    }
+
+    private fun createGlucoseImageIcon(value: String): Icon {
+        val size = 300
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = size * 0.52f
+        }
+
+        val maxWidth = size * 0.82f
+        val measuredWidth = paint.measureText(value)
+        if (measuredWidth > maxWidth && measuredWidth > 0f) {
+            paint.textSize *= maxWidth / measuredWidth
+        }
+
+        val baseline = size / 2f - (paint.ascent() + paint.descent()) / 2f
+        canvas.drawText(value, size / 2f, baseline, paint)
+        return Icon.createWithBitmap(bitmap)
+    }
 }
